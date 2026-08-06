@@ -217,6 +217,131 @@ function attachVoucherEditorEvents() {
   document.getElementById('pdf-btn').addEventListener('click', () => window.print());
 }
 
+/* ===== RENDER: QUOTATION EDITOR ===== */
+function openNewQuotation() {
+  currentDoc = { id: generateId(), type: 'quotation', clientName: '', date: todayIso(), categories: [] };
+  showScreen('quotation');
+  renderQuotationEditor();
+}
+
+function renderQuotationEditor() {
+  const d = currentDoc;
+
+  const categoriesHtml = d.categories.map((cat, ci) => {
+    const itemRows = cat.items.map((item, ii) => `
+      <tr>
+        <td><input type="text" data-ci="${ci}" data-ii="${ii}" data-field="description" value="${escapeHtml(item.description)}"></td>
+        <td><input type="number" data-ci="${ci}" data-ii="${ii}" data-field="qty" value="${item.qty}" style="width:70px;"></td>
+        <td><input type="text" data-ci="${ci}" data-ii="${ii}" data-field="unit" value="${escapeHtml(item.unit || '')}" style="width:60px;"></td>
+        <td><input type="number" data-ci="${ci}" data-ii="${ii}" data-field="rate" value="${item.rate}" style="width:100px;"></td>
+        <td>${formatCurrency(calcLineAmount(item.qty, item.rate))}</td>
+        <td class="no-print"><button class="remove-item" data-ci="${ci}" data-ii="${ii}">Remove</button></td>
+      </tr>`).join('');
+
+    return `
+      <div style="margin-bottom:20px;border:1px solid var(--border);border-radius:4px;padding:12px;">
+        <div class="field-row" style="align-items:flex-end;">
+          <div style="flex:2;">
+            <label>Category</label>
+            <input type="text" data-ci="${ci}" data-field="name" value="${escapeHtml(cat.name)}" placeholder="e.g. Electrician">
+          </div>
+          <button class="no-print remove-category" data-ci="${ci}">Remove Category</button>
+        </div>
+        <table>
+          <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Amount</th><th class="no-print"></th></tr></thead>
+          <tbody>${itemRows}</tbody>
+          <tfoot><tr><td colspan="4">Subtotal</td><td>${formatCurrency(calcCategorySubtotal(cat.items))}</td><td class="no-print"></td></tr></tfoot>
+        </table>
+        <button class="no-print add-item-btn" data-ci="${ci}">+ Add Item</button>
+      </div>`;
+  }).join('');
+
+  document.getElementById('screen-quotation').innerHTML = `
+    <div class="no-print"><button id="back-btn">&larr; Back</button></div>
+    <h2>Quotation</h2>
+    <div id="validation-msg" class="error hidden"></div>
+    <div class="field-row">
+      <div><label>Client Name</label><input type="text" id="f-client" value="${escapeHtml(d.clientName)}"></div>
+      <div><label>Date</label><input type="date" id="f-date" value="${d.date}"></div>
+    </div>
+    <div id="categories-container">${categoriesHtml}</div>
+    <button class="no-print" id="add-category-btn">+ Add Category</button>
+    <h3 class="no-print">Grand Total: <span id="quotation-total">${formatCurrency(calcQuotationGrandTotal(d.categories))}</span></h3>
+    <div class="actions no-print">
+      <button class="primary" id="save-btn">Save</button>
+      <button id="pdf-btn">Download PDF</button>
+    </div>
+  `;
+  attachQuotationEditorEvents();
+}
+
+function attachQuotationEditorEvents() {
+  document.getElementById('back-btn').addEventListener('click', () => { showScreen('list'); renderList(); });
+  document.getElementById('f-client').addEventListener('input', e => { currentDoc.clientName = e.target.value; });
+  document.getElementById('f-date').addEventListener('input', e => { currentDoc.date = e.target.value; });
+
+  document.querySelectorAll('[data-field="name"]').forEach(input => {
+    input.addEventListener('input', e => {
+      currentDoc.categories[Number(e.target.dataset.ci)].name = e.target.value;
+    });
+  });
+
+  document.querySelectorAll('#categories-container input[data-ii]').forEach(input => {
+    input.addEventListener('input', e => {
+      const ci = Number(e.target.dataset.ci);
+      const ii = Number(e.target.dataset.ii);
+      const field = e.target.dataset.field;
+      const item = currentDoc.categories[ci].items[ii];
+      item[field] = (field === 'qty' || field === 'rate') ? Number(e.target.value) || 0 : e.target.value;
+      if (field === 'qty' || field === 'rate') {
+        document.getElementById('quotation-total').textContent = formatCurrency(calcQuotationGrandTotal(currentDoc.categories));
+      }
+    });
+  });
+
+  document.getElementById('add-category-btn').addEventListener('click', () => {
+    currentDoc.categories.push({ name: '', items: [] });
+    renderQuotationEditor();
+  });
+
+  document.querySelectorAll('.remove-category').forEach(btn => {
+    btn.addEventListener('click', e => {
+      currentDoc.categories.splice(Number(e.target.dataset.ci), 1);
+      renderQuotationEditor();
+    });
+  });
+
+  document.querySelectorAll('.add-item-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      currentDoc.categories[Number(e.target.dataset.ci)].items.push({ description: '', qty: 1, unit: '', rate: 0 });
+      renderQuotationEditor();
+    });
+  });
+
+  document.querySelectorAll('.remove-item').forEach(btn => {
+    btn.addEventListener('click', e => {
+      currentDoc.categories[Number(e.target.dataset.ci)].items.splice(Number(e.target.dataset.ii), 1);
+      renderQuotationEditor();
+    });
+  });
+
+  document.getElementById('save-btn').addEventListener('click', () => {
+    const msg = document.getElementById('validation-msg');
+    if (!currentDoc.clientName.trim() || !currentDoc.date) {
+      msg.textContent = 'Client name and date are required.';
+      msg.classList.remove('hidden');
+      return;
+    }
+    msg.classList.add('hidden');
+    currentDoc.categories = currentDoc.categories
+      .map(cat => ({ ...cat, items: cat.items.filter(i => i.description.trim() || i.qty || i.rate) }))
+      .filter(cat => cat.name.trim() && cat.items.length > 0);
+    if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
+  });
+
+  document.getElementById('pdf-btn').addEventListener('click', () => window.print());
+}
+
 /* ===== RENDER: LIST ===== */
 function renderList(filter = '') {
   const docs = loadDocuments()
