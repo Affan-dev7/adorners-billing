@@ -37,6 +37,21 @@
   );
   assertEqual(calcVoucherGrandTotal([]), 0, 'calcVoucherGrandTotal: empty list');
 
+  assertEqual(calcTotalAmount(1691640, 3350000), 5041640, 'calcTotalAmount: matches Mairaj Bhai bill');
+  assertEqual(calcTotalAmount(100000, 0), 100000, 'calcTotalAmount: no prior approval amount');
+
+  assertEqual(
+    calcBalance(5041640, 4300000, [{ label: 'Gazebo Difference', amount: 11000 }]),
+    730640,
+    'calcBalance: matches Mairaj Bhai bill (payment + one adjustment)'
+  );
+  assertEqual(calcBalance(100, 40, []), 60, 'calcBalance: no adjustments');
+  assertEqual(
+    calcBalance(1000, 200, [{ label: 'A', amount: 100 }, { label: 'B', amount: 50 }]),
+    650,
+    'calcBalance: multiple adjustments'
+  );
+
   document.getElementById('output').textContent = results.join('\n');
   const failed = results.filter(r => r.startsWith('FAIL'));
   document.title = failed.length

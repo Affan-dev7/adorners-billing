@@ -16,3 +16,11 @@ function calcQuotationGrandTotal(categories) {
 function calcVoucherGrandTotal(entries) {
   return entries.reduce((sum, entry) => sum + entry.amount, 0);
 }
+
+function calcTotalAmount(itemsTotal, quotationApprovalAmount) {
+  return itemsTotal + quotationApprovalAmount;
+}
+
+function calcBalance(totalAmount, paymentReceived, adjustments) {
+  return adjustments.reduce((balance, adj) => balance - adj.amount, totalAmount - paymentReceived);
+}
