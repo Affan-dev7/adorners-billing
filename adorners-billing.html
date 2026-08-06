@@ -57,6 +57,27 @@
     #app { max-width: none; padding: 0; }
     .no-print { display: none !important; }
     @page { margin: 2in 0.75in 0.75in 0.75in; }
+
+    /* Field values should read as plain document text when printed, not as editable form controls.
+       !important beats the base input[type=...] rules (higher selector specificity) that set the border. */
+    input {
+      border: none !important;
+      background: transparent !important;
+      padding: 2px 0 !important;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=date]::-webkit-calendar-picker-indicator {
+      display: none;
+    }
   }
 </style>
 </head>
@@ -152,12 +173,12 @@ function renderVoucherEditor() {
     </tr>`).join('');
 
   document.getElementById('screen-voucher').innerHTML = `
-    <div class="no-print"><button id="back-btn">&larr; Back</button></div>
+    <div class="no-print"><button id="v-back-btn">&larr; Back</button></div>
     <h2>Payment Voucher</h2>
-    <div id="validation-msg" class="error hidden"></div>
+    <div id="v-validation-msg" class="error hidden"></div>
     <div class="field-row">
-      <div><label>Client Name</label><input type="text" id="f-client" value="${escapeHtml(d.clientName)}"></div>
-      <div><label>Date</label><input type="date" id="f-date" value="${d.date}"></div>
+      <div><label>Client Name</label><input type="text" id="v-f-client" value="${escapeHtml(d.clientName)}"></div>
+      <div><label>Date</label><input type="date" id="v-f-date" value="${d.date}"></div>
     </div>
     <table>
       <thead><tr><th>S.No</th><th>Date</th><th>Detail</th><th>Amount</th><th class="no-print"></th></tr></thead>
@@ -166,18 +187,18 @@ function renderVoucherEditor() {
     </table>
     <button class="no-print" id="add-row-btn">+ Add Row</button>
     <div class="actions no-print">
-      <button class="primary" id="save-btn">Save</button>
-      <button id="pdf-btn">Download PDF</button>
+      <button class="primary" id="v-save-btn">Save</button>
+      <button id="v-pdf-btn">Download PDF</button>
     </div>
   `;
   attachVoucherEditorEvents();
 }
 
 function attachVoucherEditorEvents() {
-  document.getElementById('back-btn').addEventListener('click', () => { showScreen('list'); renderList(); });
+  document.getElementById('v-back-btn').addEventListener('click', () => { showScreen('list'); renderList(); });
 
-  document.getElementById('f-client').addEventListener('input', e => { currentDoc.clientName = e.target.value; });
-  document.getElementById('f-date').addEventListener('input', e => { currentDoc.date = e.target.value; });
+  document.getElementById('v-f-client').addEventListener('input', e => { currentDoc.clientName = e.target.value; });
+  document.getElementById('v-f-date').addEventListener('input', e => { currentDoc.date = e.target.value; });
 
   document.querySelectorAll('#entries-tbody input').forEach(input => {
     input.addEventListener('input', (e) => {
@@ -202,8 +223,8 @@ function attachVoucherEditorEvents() {
     });
   });
 
-  document.getElementById('save-btn').addEventListener('click', () => {
-    const msg = document.getElementById('validation-msg');
+  document.getElementById('v-save-btn').addEventListener('click', () => {
+    const msg = document.getElementById('v-validation-msg');
     if (!currentDoc.clientName.trim() || !currentDoc.date) {
       msg.textContent = 'Client name and date are required.';
       msg.classList.remove('hidden');
@@ -214,7 +235,7 @@ function attachVoucherEditorEvents() {
     if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
   });
 
-  document.getElementById('pdf-btn').addEventListener('click', () => window.print());
+  document.getElementById('v-pdf-btn').addEventListener('click', () => window.print());
 }
 
 /* ===== RENDER: QUOTATION EDITOR ===== */
@@ -234,7 +255,7 @@ function renderQuotationEditor() {
         <td><input type="number" data-ci="${ci}" data-ii="${ii}" data-field="qty" value="${item.qty}" style="width:70px;"></td>
         <td><input type="text" data-ci="${ci}" data-ii="${ii}" data-field="unit" value="${escapeHtml(item.unit || '')}" style="width:60px;"></td>
         <td><input type="number" data-ci="${ci}" data-ii="${ii}" data-field="rate" value="${item.rate}" style="width:100px;"></td>
-        <td>${formatCurrency(calcLineAmount(item.qty, item.rate))}</td>
+        <td class="item-amount" data-ci="${ci}" data-ii="${ii}">${formatCurrency(calcLineAmount(item.qty, item.rate))}</td>
         <td class="no-print"><button class="remove-item" data-ci="${ci}" data-ii="${ii}">Remove</button></td>
       </tr>`).join('');
 
@@ -250,35 +271,35 @@ function renderQuotationEditor() {
         <table>
           <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Amount</th><th class="no-print"></th></tr></thead>
           <tbody>${itemRows}</tbody>
-          <tfoot><tr><td colspan="4">Subtotal</td><td>${formatCurrency(calcCategorySubtotal(cat.items))}</td><td class="no-print"></td></tr></tfoot>
+          <tfoot><tr><td colspan="4">Subtotal</td><td class="category-subtotal" data-ci="${ci}">${formatCurrency(calcCategorySubtotal(cat.items))}</td><td class="no-print"></td></tr></tfoot>
         </table>
         <button class="no-print add-item-btn" data-ci="${ci}">+ Add Item</button>
       </div>`;
   }).join('');
 
   document.getElementById('screen-quotation').innerHTML = `
-    <div class="no-print"><button id="back-btn">&larr; Back</button></div>
+    <div class="no-print"><button id="q-back-btn">&larr; Back</button></div>
     <h2>Quotation</h2>
-    <div id="validation-msg" class="error hidden"></div>
+    <div id="q-validation-msg" class="error hidden"></div>
     <div class="field-row">
-      <div><label>Client Name</label><input type="text" id="f-client" value="${escapeHtml(d.clientName)}"></div>
-      <div><label>Date</label><input type="date" id="f-date" value="${d.date}"></div>
+      <div><label>Client Name</label><input type="text" id="q-f-client" value="${escapeHtml(d.clientName)}"></div>
+      <div><label>Date</label><input type="date" id="q-f-date" value="${d.date}"></div>
     </div>
     <div id="categories-container">${categoriesHtml}</div>
     <button class="no-print" id="add-category-btn">+ Add Category</button>
     <h3 class="no-print">Grand Total: <span id="quotation-total">${formatCurrency(calcQuotationGrandTotal(d.categories))}</span></h3>
     <div class="actions no-print">
-      <button class="primary" id="save-btn">Save</button>
-      <button id="pdf-btn">Download PDF</button>
+      <button class="primary" id="q-save-btn">Save</button>
+      <button id="q-pdf-btn">Download PDF</button>
     </div>
   `;
   attachQuotationEditorEvents();
 }
 
 function attachQuotationEditorEvents() {
-  document.getElementById('back-btn').addEventListener('click', () => { showScreen('list'); renderList(); });
-  document.getElementById('f-client').addEventListener('input', e => { currentDoc.clientName = e.target.value; });
-  document.getElementById('f-date').addEventListener('input', e => { currentDoc.date = e.target.value; });
+  document.getElementById('q-back-btn').addEventListener('click', () => { showScreen('list'); renderList(); });
+  document.getElementById('q-f-client').addEventListener('input', e => { currentDoc.clientName = e.target.value; });
+  document.getElementById('q-f-date').addEventListener('input', e => { currentDoc.date = e.target.value; });
 
   document.querySelectorAll('[data-field="name"]').forEach(input => {
     input.addEventListener('input', e => {
@@ -294,6 +315,10 @@ function attachQuotationEditorEvents() {
       const item = currentDoc.categories[ci].items[ii];
       item[field] = (field === 'qty' || field === 'rate') ? Number(e.target.value) || 0 : e.target.value;
       if (field === 'qty' || field === 'rate') {
+        document.querySelector(`.item-amount[data-ci="${ci}"][data-ii="${ii}"]`).textContent =
+          formatCurrency(calcLineAmount(item.qty, item.rate));
+        document.querySelector(`.category-subtotal[data-ci="${ci}"]`).textContent =
+          formatCurrency(calcCategorySubtotal(currentDoc.categories[ci].items));
         document.getElementById('quotation-total').textContent = formatCurrency(calcQuotationGrandTotal(currentDoc.categories));
       }
     });
@@ -325,8 +350,8 @@ function attachQuotationEditorEvents() {
     });
   });
 
-  document.getElementById('save-btn').addEventListener('click', () => {
-    const msg = document.getElementById('validation-msg');
+  document.getElementById('q-save-btn').addEventListener('click', () => {
+    const msg = document.getElementById('q-validation-msg');
     if (!currentDoc.clientName.trim() || !currentDoc.date) {
       msg.textContent = 'Client name and date are required.';
       msg.classList.remove('hidden');
@@ -339,7 +364,7 @@ function attachQuotationEditorEvents() {
     if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
   });
 
-  document.getElementById('pdf-btn').addEventListener('click', () => window.print());
+  document.getElementById('q-pdf-btn').addEventListener('click', () => window.print());
 }
 
 /* ===== RENDER: LIST ===== */
