@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head><title>calculations.js tests</title></head>
+<body>
+<pre id="output"></pre>
+<script src="calculations.js"></script>
+<script>
+  const results = [];
+  function assertEqual(actual, expected, label) {
+    const pass = actual === expected;
+    results.push(`${pass ? 'PASS' : 'FAIL'} — ${label} (expected ${expected}, got ${actual})`);
+  }
+
+  assertEqual(calcLineAmount(30, 7200), 216000, 'calcLineAmount: 30 x 7200');
+  assertEqual(calcLineAmount(0, 500), 0, 'calcLineAmount: zero qty');
+
+  assertEqual(
+    calcCategorySubtotal([{ qty: 30, rate: 7200 }, { qty: 1, rate: 6000 }]),
+    222000,
+    'calcCategorySubtotal: two items'
+  );
+  assertEqual(calcCategorySubtotal([]), 0, 'calcCategorySubtotal: empty list');
+
+  assertEqual(
+    calcQuotationGrandTotal([
+      { items: [{ qty: 30, rate: 7200 }, { qty: 1, rate: 6000 }] },
+      { items: [{ qty: 1, rate: 28000 }] }
+    ]),
+    250000,
+    'calcQuotationGrandTotal: two categories'
+  );
+
+  assertEqual(
+    calcVoucherGrandTotal([{ amount: 300000 }, { amount: 200000 }, { amount: 50000 }]),
+    550000,
+    'calcVoucherGrandTotal: three entries'
+  );
+  assertEqual(calcVoucherGrandTotal([]), 0, 'calcVoucherGrandTotal: empty list');
+
+  document.getElementById('output').textContent = results.join('\n');
+  const failed = results.filter(r => r.startsWith('FAIL'));
+  document.title = failed.length
+    ? `${failed.length} FAILED — calculations.js tests`
+    : 'ALL PASS — calculations.js tests';
+</script>
+</body>
+</html>
