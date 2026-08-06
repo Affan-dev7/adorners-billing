@@ -69,7 +69,8 @@
   .print-table th, .print-table td { border: 1px solid #333; padding: 6px 8px; text-align: left; vertical-align: top; }
   .print-table thead th { background: var(--navy); color: #fff; }
   .print-table tbody tr:nth-child(even) { background: var(--band); }
-  .print-table tfoot td, .print-table td.subtotal-label, .print-table td.subtotal-amount { font-weight: bold; }
+  .print-table tfoot td { font-weight: bold; }
+  .print-table tfoot tr.grand-total-row td { border-top: 2px solid #333; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -414,32 +415,35 @@ function attachQuotationEditorEvents() {
 }
 
 /* ===== PRINT: QUOTATION =====
-   Matches the existing "Bill Additional Work" layout: one numbered row per category
-   (S.No spans the whole group), a bulleted item under it per line, then a bold
-   subtotal line, ending in a grand total row. */
+   Matches the existing "Bill Additional Work" layout: one row per category, with the
+   category name and its bulleted items stacked inside the same cell (Qty/Rate/Amount
+   stack line-for-line alongside them) — not a separate table row per item. Subtotals
+   are not interleaved between categories; they're listed together at the end of the
+   table, followed by the grand total. */
 function renderQuotationPrintView(doc) {
   const rowsHtml = doc.categories.map((cat, ci) => {
-    const rowCount = cat.items.length + 2; // category name row + item rows + subtotal row
-    const nameRow = `
+    const detailLines = [`<div><strong>${escapeHtml(cat.name)}</strong></div>`]
+      .concat(cat.items.map(item => `<div>&bull; ${escapeHtml(item.description)}</div>`));
+    const qtyLines = ['<div>&nbsp;</div>']
+      .concat(cat.items.map(item => `<div>${item.qty}${item.unit ? ' ' + escapeHtml(item.unit) : ''}</div>`));
+    const rateLines = ['<div>&nbsp;</div>']
+      .concat(cat.items.map(item => `<div>${formatCurrency(item.rate)}</div>`));
+    const amountLines = ['<div>&nbsp;</div>']
+      .concat(cat.items.map(item => `<div><strong>${formatCurrency(calcLineAmount(item.qty, item.rate))}</strong></div>`));
+
+    return `
       <tr>
-        <td rowspan="${rowCount}">${ci + 1}</td>
-        <td><strong>${escapeHtml(cat.name)}</strong></td>
-        <td></td><td></td><td></td>
+        <td>${ci + 1}.</td>
+        <td>${detailLines.join('')}</td>
+        <td>${qtyLines.join('')}</td>
+        <td>${rateLines.join('')}</td>
+        <td>${amountLines.join('')}</td>
       </tr>`;
-    const itemRows = cat.items.map(item => `
-      <tr>
-        <td>&bull; ${escapeHtml(item.description)}</td>
-        <td>${item.qty}${item.unit ? ' ' + escapeHtml(item.unit) : ''}</td>
-        <td>${formatCurrency(item.rate)}</td>
-        <td>${formatCurrency(calcLineAmount(item.qty, item.rate))}</td>
-      </tr>`).join('');
-    const subtotalRow = `
-      <tr>
-        <td colspan="3" class="subtotal-label" style="text-align:right;">Subtotal</td>
-        <td class="subtotal-amount">${formatCurrency(calcCategorySubtotal(cat.items))}</td>
-      </tr>`;
-    return nameRow + itemRows + subtotalRow;
   }).join('');
+
+  const subtotalRows = doc.categories.map(cat => `
+    <tr><td colspan="4">${escapeHtml(cat.name)} Subtotal</td><td>${formatCurrency(calcCategorySubtotal(cat.items))}</td></tr>`
+  ).join('');
 
   document.getElementById('print-area').innerHTML = `
     <div class="print-doc">
@@ -451,7 +455,10 @@ function renderQuotationPrintView(doc) {
       <table class="print-table">
         <thead><tr><th>S. No.</th><th>Details</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
-        <tfoot><tr><td colspan="4">Grand Total</td><td>${formatCurrency(calcQuotationGrandTotal(doc.categories))}</td></tr></tfoot>
+        <tfoot>
+          ${subtotalRows}
+          <tr class="grand-total-row"><td colspan="4">Grand Total</td><td>${formatCurrency(calcQuotationGrandTotal(doc.categories))}</td></tr>
+        </tfoot>
       </table>
     </div>`;
 }
