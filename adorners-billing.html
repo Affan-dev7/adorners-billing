@@ -133,9 +133,58 @@ function showScreen(name) {
   document.getElementById('screen-' + name).classList.remove('hidden');
 }
 
+/* ===== RENDER: LIST ===== */
+function renderList(filter = '') {
+  const docs = loadDocuments()
+    .filter(d => d.clientName.toLowerCase().includes(filter.toLowerCase()))
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+
+  const rows = docs.map(d => {
+    const total = d.type === 'voucher'
+      ? calcVoucherGrandTotal(d.entries)
+      : calcQuotationGrandTotal(d.categories);
+    return `
+      <div class="doc-row" data-id="${d.id}" data-type="${d.type}">
+        <div>
+          <strong>${escapeHtml(d.clientName)}</strong>
+          <span class="badge">${d.type === 'voucher' ? 'Voucher' : 'Quotation'}</span>
+          <div style="font-size:13px;color:#666;">${d.date}</div>
+        </div>
+        <div>${formatCurrency(total)}</div>
+      </div>`;
+  }).join('') || '<p style="color:#666;">No documents yet.</p>';
+
+  document.getElementById('screen-list').innerHTML = `
+    <h1>Adorners Billing</h1>
+    <div class="actions">
+      <button class="primary" id="new-voucher-btn">+ New Payment Voucher</button>
+      <button class="primary" id="new-quotation-btn">+ New Quotation</button>
+    </div>
+    <div style="margin:16px 0;">
+      <input type="text" id="search-input" placeholder="Search by client name..." value="${escapeHtml(filter)}">
+    </div>
+    <div id="doc-rows">${rows}</div>
+  `;
+
+  document.getElementById('new-voucher-btn').addEventListener('click', () => openNewVoucher());
+  document.getElementById('new-quotation-btn').addEventListener('click', () => openNewQuotation());
+  document.getElementById('search-input').addEventListener('input', (e) => renderList(e.target.value));
+  document.querySelectorAll('.doc-row').forEach(row => {
+    row.addEventListener('click', () => openExistingDocument(row.dataset.id, row.dataset.type));
+  });
+}
+
+function openExistingDocument(id, type) {
+  currentDoc = getDocument(id);
+  if (!currentDoc) return;
+  if (type === 'voucher') { showScreen('voucher'); renderVoucherEditor(); }
+  else { showScreen('quotation'); renderQuotationEditor(); }
+}
+
 /* ===== INIT ===== */
 function init() {
   showScreen('list');
+  renderList();
 }
 init();
 </script>
