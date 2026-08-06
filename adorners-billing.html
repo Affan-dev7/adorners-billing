@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adorners — Billing Tool</title>
+<style>
+  :root {
+    --navy: #1a2744;
+    --band: #dbe5f1;
+    --border: #c7c7c7;
+    --error: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Arial, sans-serif;
+    margin: 0;
+    color: #1a1a1a;
+    background: #f4f4f5;
+  }
+  #app { max-width: 900px; margin: 0 auto; padding: 24px; }
+  .screen.hidden { display: none; }
+  h1, h2 { margin: 0 0 16px; }
+  button {
+    font: inherit;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+  }
+  button.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+  input[type=text], input[type=number], input[type=date] {
+    font: inherit;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    width: 100%;
+  }
+  label { display: block; font-size: 13px; color: #444; margin-bottom: 4px; }
+  .field-row { display: flex; gap: 16px; margin-bottom: 16px; }
+  .field-row > div { flex: 1; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  thead th { background: var(--navy); color: #fff; }
+  tbody tr:nth-child(even) { background: var(--band); }
+  tfoot td { font-weight: bold; }
+  .error { color: var(--error); font-size: 13px; margin-bottom: 12px; }
+  .error.hidden { display: none; }
+  .actions { display: flex; gap: 8px; margin-top: 16px; }
+  .doc-row { display: flex; justify-content: space-between; padding: 10px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 8px; cursor: pointer; background: #fff; }
+  .doc-row:hover { background: #eef1f7; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--band); }
+
+  @media print {
+    body { background: #fff; margin: 0; }
+    #app { max-width: none; padding: 0; }
+    .no-print { display: none !important; }
+    @page { margin: 2in 0.75in 0.75in 0.75in; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="screen-list" class="screen"></div>
+  <div id="screen-voucher" class="screen hidden"></div>
+  <div id="screen-quotation" class="screen hidden"></div>
+</div>
+
+<script src="calculations.js"></script>
+<script>
+/* ===== STORAGE ===== */
+const STORAGE_KEY = 'adorners_billing_documents';
+
+function loadDocuments() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    alert('Could not read saved documents: ' + err.message);
+    return [];
+  }
+}
+
+function saveDocument(doc) {
+  try {
+    const docs = loadDocuments();
+    doc.updatedAt = new Date().toISOString();
+    const idx = docs.findIndex(d => d.id === doc.id);
+    if (idx === -1) {
+      doc.createdAt = doc.updatedAt;
+      docs.push(doc);
+    } else {
+      docs[idx] = doc;
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
+    return true;
+  } catch (err) {
+    alert('Could not save document: ' + err.message);
+    return false;
+  }
+}
+
+function getDocument(id) {
+  return loadDocuments().find(d => d.id === id) || null;
+}
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/* ===== HELPERS ===== */
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+
+function formatCurrency(amount) {
+  const rounded = Math.round(amount || 0);
+  return `Rs.${rounded.toLocaleString('en-US')}/-`;
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/* ===== SCREEN SWITCHING ===== */
+let currentDoc = null;
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(el => el.classList.add('hidden'));
+  document.getElementById('screen-' + name).classList.remove('hidden');
+}
+
+/* ===== INIT ===== */
+function init() {
+  showScreen('list');
+}
+init();
+</script>
+</body>
+</html>
