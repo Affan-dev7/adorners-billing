@@ -81,8 +81,35 @@
 </div>
 <div id="print-area" class="print-only"></div>
 
-<script src="calculations.js"></script>
 <script>
+/* ===== CALCULATIONS =====
+   Kept identical to calculations.js (tested separately via calculations.test.html)
+   and inlined here so this single file is everything Adorners needs — no second
+   file to remember to copy alongside it. If you change the math, update both. */
+function calcLineAmount(qty, rate) {
+  return qty * rate;
+}
+
+function calcCategorySubtotal(items) {
+  return items.reduce((sum, item) => sum + calcLineAmount(item.qty, item.rate), 0);
+}
+
+function calcQuotationGrandTotal(categories) {
+  return categories.reduce((sum, cat) => sum + calcCategorySubtotal(cat.items), 0);
+}
+
+function calcVoucherGrandTotal(entries) {
+  return entries.reduce((sum, entry) => sum + entry.amount, 0);
+}
+
+function calcTotalAmount(itemsTotal, quotationApprovalAmount) {
+  return itemsTotal + quotationApprovalAmount;
+}
+
+function calcBalance(totalAmount, paymentReceived, adjustments) {
+  return adjustments.reduce((balance, adj) => balance - adj.amount, totalAmount - paymentReceived);
+}
+
 /* ===== STORAGE ===== */
 const STORAGE_KEY = 'adorners_billing_documents';
 
