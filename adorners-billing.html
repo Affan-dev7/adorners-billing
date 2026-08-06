@@ -284,9 +284,18 @@ function renderVoucherPrintView(doc) {
 
 /* ===== RENDER: QUOTATION EDITOR ===== */
 function openNewQuotation() {
-  currentDoc = { id: generateId(), type: 'quotation', clientName: '', date: todayIso(), categories: [] };
+  currentDoc = {
+    id: generateId(), type: 'quotation', clientName: '', date: todayIso(), categories: [],
+    summary: { quotationApprovalAmount: 0, paymentReceived: 0, adjustments: [] },
+  };
   showScreen('quotation');
   renderQuotationEditor();
+}
+
+// Documents saved before the payment-summary feature existed have no `summary` field.
+function normalizeQuotation(doc) {
+  doc.summary = doc.summary || { quotationApprovalAmount: 0, paymentReceived: 0, adjustments: [] };
+  return doc;
 }
 
 function renderQuotationEditor() {
@@ -321,6 +330,17 @@ function renderQuotationEditor() {
       </div>`;
   }).join('');
 
+  const itemsTotal = calcQuotationGrandTotal(d.categories);
+  const totalAmount = calcTotalAmount(itemsTotal, d.summary.quotationApprovalAmount);
+  const balance = calcBalance(totalAmount, d.summary.paymentReceived, d.summary.adjustments);
+
+  const adjustmentsHtml = d.summary.adjustments.map((adj, ai) => `
+    <div class="field-row" style="align-items:flex-end;">
+      <div style="flex:2;"><label>Adjustment (e.g. "Gazebo Difference")</label><input type="text" data-ai="${ai}" data-field="label" value="${escapeHtml(adj.label)}"></div>
+      <div><label>Amount</label><input type="number" data-ai="${ai}" data-field="amount" value="${adj.amount}"></div>
+      <button class="no-print remove-adjustment" data-ai="${ai}">Remove</button>
+    </div>`).join('');
+
   document.getElementById('screen-quotation').innerHTML = `
     <div class="no-print"><button id="q-back-btn">&larr; Back</button></div>
     <h2>Quotation</h2>
@@ -331,13 +351,37 @@ function renderQuotationEditor() {
     </div>
     <div id="categories-container">${categoriesHtml}</div>
     <button class="no-print" id="add-category-btn">+ Add Category</button>
-    <h3 class="no-print">Grand Total: <span id="quotation-total">${formatCurrency(calcQuotationGrandTotal(d.categories))}</span></h3>
+
+    <div style="margin-top:20px;border:1px solid var(--border);border-radius:4px;padding:12px;">
+      <label style="font-size:15px;font-weight:bold;color:#1a1a1a;">Summary</label>
+      <div class="field-row">
+        <div><label>Quotation Approval Amount</label><input type="number" id="q-approval-amount" value="${d.summary.quotationApprovalAmount}"></div>
+        <div><label>Payment Received</label><input type="number" id="q-payment-received" value="${d.summary.paymentReceived}"></div>
+      </div>
+      <div id="adjustments-container">${adjustmentsHtml}</div>
+      <button class="no-print" id="add-adjustment-btn">+ Add Adjustment</button>
+      <div style="margin-top:12px;line-height:1.8;">
+        <div>Additional Work Amount: <strong id="quotation-total">${formatCurrency(itemsTotal)}</strong></div>
+        <div>Total Amount: <strong id="q-total-amount">${formatCurrency(totalAmount)}</strong></div>
+        <div>Balance Amount: <strong id="q-balance-amount">${formatCurrency(balance)}</strong></div>
+      </div>
+    </div>
+
     <div class="actions no-print">
       <button class="primary" id="q-save-btn">Save</button>
       <button id="q-pdf-btn">Download PDF</button>
     </div>
   `;
   attachQuotationEditorEvents();
+}
+
+function refreshQuotationSummaryTotals() {
+  const itemsTotal = calcQuotationGrandTotal(currentDoc.categories);
+  const totalAmount = calcTotalAmount(itemsTotal, currentDoc.summary.quotationApprovalAmount);
+  const balance = calcBalance(totalAmount, currentDoc.summary.paymentReceived, currentDoc.summary.adjustments);
+  document.getElementById('quotation-total').textContent = formatCurrency(itemsTotal);
+  document.getElementById('q-total-amount').textContent = formatCurrency(totalAmount);
+  document.getElementById('q-balance-amount').textContent = formatCurrency(balance);
 }
 
 function attachQuotationEditorEvents() {
@@ -363,7 +407,7 @@ function attachQuotationEditorEvents() {
           formatCurrency(calcLineAmount(item.qty, item.rate));
         document.querySelector(`.category-subtotal[data-ci="${ci}"]`).textContent =
           formatCurrency(calcCategorySubtotal(currentDoc.categories[ci].items));
-        document.getElementById('quotation-total').textContent = formatCurrency(calcQuotationGrandTotal(currentDoc.categories));
+        refreshQuotationSummaryTotals();
       }
     });
   });
@@ -394,6 +438,37 @@ function attachQuotationEditorEvents() {
     });
   });
 
+  document.getElementById('q-approval-amount').addEventListener('input', e => {
+    currentDoc.summary.quotationApprovalAmount = Number(e.target.value) || 0;
+    refreshQuotationSummaryTotals();
+  });
+
+  document.getElementById('q-payment-received').addEventListener('input', e => {
+    currentDoc.summary.paymentReceived = Number(e.target.value) || 0;
+    refreshQuotationSummaryTotals();
+  });
+
+  document.querySelectorAll('#adjustments-container input').forEach(input => {
+    input.addEventListener('input', e => {
+      const ai = Number(e.target.dataset.ai);
+      const field = e.target.dataset.field;
+      currentDoc.summary.adjustments[ai][field] = field === 'amount' ? Number(e.target.value) || 0 : e.target.value;
+      if (field === 'amount') refreshQuotationSummaryTotals();
+    });
+  });
+
+  document.getElementById('add-adjustment-btn').addEventListener('click', () => {
+    currentDoc.summary.adjustments.push({ label: '', amount: 0 });
+    renderQuotationEditor();
+  });
+
+  document.querySelectorAll('.remove-adjustment').forEach(btn => {
+    btn.addEventListener('click', e => {
+      currentDoc.summary.adjustments.splice(Number(e.target.dataset.ai), 1);
+      renderQuotationEditor();
+    });
+  });
+
   document.getElementById('q-save-btn').addEventListener('click', () => {
     const msg = document.getElementById('q-validation-msg');
     if (!currentDoc.clientName.trim() || !currentDoc.date) {
@@ -405,6 +480,7 @@ function attachQuotationEditorEvents() {
     currentDoc.categories = currentDoc.categories
       .map(cat => ({ ...cat, items: cat.items.filter(i => i.description.trim() || i.qty || i.rate) }))
       .filter(cat => cat.name.trim() && cat.items.length > 0);
+    currentDoc.summary.adjustments = currentDoc.summary.adjustments.filter(a => a.label.trim() || a.amount);
     if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
   });
 
@@ -419,8 +495,16 @@ function attachQuotationEditorEvents() {
    category name and its bulleted items stacked inside the same cell (Qty/Rate/Amount
    stack line-for-line alongside them) — not a separate table row per item. Subtotals
    are not interleaved between categories; they're listed together at the end of the
-   table, followed by the grand total. */
+   table. If a quotation approval amount, payment received, or adjustment has been
+   entered, the end of the table also carries the full payment summary (Additional Work
+   Amount / Quotation Approval Amount / Total Amount / Payment Received / Balance Amount,
+   plus a running balance after each "Less X" adjustment) — otherwise just a plain
+   Grand Total, so a simple first-time quotation doesn't show a wall of zero rows. */
 function renderQuotationPrintView(doc) {
+  const summary = doc.summary || { quotationApprovalAmount: 0, paymentReceived: 0, adjustments: [] };
+  const itemsTotal = calcQuotationGrandTotal(doc.categories);
+  const hasSummary = summary.quotationApprovalAmount !== 0 || summary.paymentReceived !== 0 || summary.adjustments.length > 0;
+
   const rowsHtml = doc.categories.map((cat, ci) => {
     const detailLines = [`<div><strong>${escapeHtml(cat.name)}</strong></div>`]
       .concat(cat.items.map(item => `<div>&bull; ${escapeHtml(item.description)}</div>`));
@@ -445,6 +529,28 @@ function renderQuotationPrintView(doc) {
     <tr><td colspan="4">${escapeHtml(cat.name)} Subtotal</td><td>${formatCurrency(calcCategorySubtotal(cat.items))}</td></tr>`
   ).join('');
 
+  let summaryRows;
+  if (hasSummary) {
+    const totalAmount = calcTotalAmount(itemsTotal, summary.quotationApprovalAmount);
+    const balanceAfterPayment = calcBalance(totalAmount, summary.paymentReceived, []);
+    let runningBalance = balanceAfterPayment;
+    const adjustmentRows = summary.adjustments.map(adj => {
+      runningBalance -= adj.amount;
+      return `
+        <tr><td colspan="4">Less ${escapeHtml(adj.label)}</td><td>${formatCurrency(adj.amount)}</td></tr>
+        <tr class="grand-total-row"><td colspan="4">Balance Amount</td><td>${formatCurrency(runningBalance)}</td></tr>`;
+    }).join('');
+    summaryRows = `
+      <tr><td colspan="4">Additional Work Amount</td><td>${formatCurrency(itemsTotal)}</td></tr>
+      <tr><td colspan="4">Quotation Approval Amount</td><td>${formatCurrency(summary.quotationApprovalAmount)}</td></tr>
+      <tr><td colspan="4">Total Amount</td><td>${formatCurrency(totalAmount)}</td></tr>
+      <tr><td colspan="4">Payment Received</td><td>${formatCurrency(summary.paymentReceived)}</td></tr>
+      <tr class="grand-total-row"><td colspan="4">Balance Amount</td><td>${formatCurrency(balanceAfterPayment)}</td></tr>
+      ${adjustmentRows}`;
+  } else {
+    summaryRows = `<tr class="grand-total-row"><td colspan="4">Grand Total</td><td>${formatCurrency(itemsTotal)}</td></tr>`;
+  }
+
   document.getElementById('print-area').innerHTML = `
     <div class="print-doc">
       <div class="print-header">
@@ -457,7 +563,7 @@ function renderQuotationPrintView(doc) {
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           ${subtotalRows}
-          <tr class="grand-total-row"><td colspan="4">Grand Total</td><td>${formatCurrency(calcQuotationGrandTotal(doc.categories))}</td></tr>
+          ${summaryRows}
         </tfoot>
       </table>
     </div>`;
@@ -508,7 +614,7 @@ function openExistingDocument(id, type) {
   currentDoc = getDocument(id);
   if (!currentDoc) return;
   if (type === 'voucher') { showScreen('voucher'); renderVoucherEditor(); }
-  else { showScreen('quotation'); renderQuotationEditor(); }
+  else { normalizeQuotation(currentDoc); showScreen('quotation'); renderQuotationEditor(); }
 }
 
 /* ===== INIT ===== */
