@@ -52,33 +52,24 @@
   .doc-row:hover { background: #eef1f7; }
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--band); }
 
+  /* Print output is a separate, plain rendering (#print-area) built fresh from the
+     document data — not the live editor form — so it can match the existing
+     Word documents exactly instead of looking like a printed web form. */
+  .print-only { display: none; }
   @media print {
     body { background: #fff; margin: 0; }
-    #app { max-width: none; padding: 0; }
-    .no-print { display: none !important; }
+    #app { display: none; }
+    .print-only { display: block; }
     @page { margin: 2in 0.75in 0.75in 0.75in; }
-
-    /* Field values should read as plain document text when printed, not as editable form controls.
-       !important beats the base input[type=...] rules (higher selector specificity) that set the border. */
-    input {
-      border: none !important;
-      background: transparent !important;
-      padding: 2px 0 !important;
-      -webkit-appearance: none;
-      appearance: none;
-    }
-    input[type=number] {
-      -moz-appearance: textfield;
-    }
-    input[type=number]::-webkit-inner-spin-button,
-    input[type=number]::-webkit-outer-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-    input[type=date]::-webkit-calendar-picker-indicator {
-      display: none;
-    }
   }
+  .print-doc { font-family: 'Times New Roman', Georgia, serif; color: #000; }
+  .print-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
+  .print-title { text-align: center; text-decoration: underline; font-size: 18px; margin: 0 0 16px; }
+  .print-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .print-table th, .print-table td { border: 1px solid #333; padding: 6px 8px; text-align: left; vertical-align: top; }
+  .print-table thead th { background: var(--navy); color: #fff; }
+  .print-table tbody tr:nth-child(even) { background: var(--band); }
+  .print-table tfoot td, .print-table td.subtotal-label, .print-table td.subtotal-amount { font-weight: bold; }
 </style>
 </head>
 <body>
@@ -87,6 +78,7 @@
   <div id="screen-voucher" class="screen hidden"></div>
   <div id="screen-quotation" class="screen hidden"></div>
 </div>
+<div id="print-area" class="print-only"></div>
 
 <script src="calculations.js"></script>
 <script>
@@ -144,6 +136,26 @@ function formatCurrency(amount) {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// "2026-07-28" -> "28th July 2026", matching how dates are written on the existing documents.
+function formatDateLong(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const day = date.getDate();
+  const suffix = (day % 10 === 1 && day !== 11) ? 'st'
+    : (day % 10 === 2 && day !== 12) ? 'nd'
+    : (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
+  const month = date.toLocaleString('en-US', { month: 'long' });
+  return `${day}${suffix} ${month} ${date.getFullYear()}`;
+}
+
+// "2026-05-18" -> "18-05-26", matching the date format used in the existing voucher rows.
+function formatDateShort(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}-${m}-${y.slice(2)}`;
 }
 
 /* ===== SCREEN SWITCHING ===== */
@@ -235,7 +247,38 @@ function attachVoucherEditorEvents() {
     if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
   });
 
-  document.getElementById('v-pdf-btn').addEventListener('click', () => window.print());
+  document.getElementById('v-pdf-btn').addEventListener('click', () => {
+    renderVoucherPrintView(currentDoc);
+    window.print();
+  });
+}
+
+/* ===== PRINT: VOUCHER =====
+   A plain, static rendering built straight from the document data — matches the
+   existing "Mr. X / Date: X" header, underlined title, and dark-header table used
+   in the current Word documents. */
+function renderVoucherPrintView(doc) {
+  const rows = doc.entries.map((entry, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${formatDateShort(entry.date)}</td>
+      <td>${escapeHtml(entry.detail)}</td>
+      <td>${formatCurrency(entry.amount)}</td>
+    </tr>`).join('');
+
+  document.getElementById('print-area').innerHTML = `
+    <div class="print-doc">
+      <div class="print-header">
+        <div>Mr. ${escapeHtml(doc.clientName)}</div>
+        <div>Date: <strong>${formatDateLong(doc.date)}</strong></div>
+      </div>
+      <h2 class="print-title">Payment Voucher</h2>
+      <table class="print-table">
+        <thead><tr><th>S. No.</th><th>Date</th><th>Detail</th><th>Amount</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="3">Total</td><td>${formatCurrency(calcVoucherGrandTotal(doc.entries))}</td></tr></tfoot>
+      </table>
+    </div>`;
 }
 
 /* ===== RENDER: QUOTATION EDITOR ===== */
@@ -364,7 +407,53 @@ function attachQuotationEditorEvents() {
     if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
   });
 
-  document.getElementById('q-pdf-btn').addEventListener('click', () => window.print());
+  document.getElementById('q-pdf-btn').addEventListener('click', () => {
+    renderQuotationPrintView(currentDoc);
+    window.print();
+  });
+}
+
+/* ===== PRINT: QUOTATION =====
+   Matches the existing "Bill Additional Work" layout: one numbered row per category
+   (S.No spans the whole group), a bulleted item under it per line, then a bold
+   subtotal line, ending in a grand total row. */
+function renderQuotationPrintView(doc) {
+  const rowsHtml = doc.categories.map((cat, ci) => {
+    const rowCount = cat.items.length + 2; // category name row + item rows + subtotal row
+    const nameRow = `
+      <tr>
+        <td rowspan="${rowCount}">${ci + 1}</td>
+        <td><strong>${escapeHtml(cat.name)}</strong></td>
+        <td></td><td></td><td></td>
+      </tr>`;
+    const itemRows = cat.items.map(item => `
+      <tr>
+        <td>&bull; ${escapeHtml(item.description)}</td>
+        <td>${item.qty}${item.unit ? ' ' + escapeHtml(item.unit) : ''}</td>
+        <td>${formatCurrency(item.rate)}</td>
+        <td>${formatCurrency(calcLineAmount(item.qty, item.rate))}</td>
+      </tr>`).join('');
+    const subtotalRow = `
+      <tr>
+        <td colspan="3" class="subtotal-label" style="text-align:right;">Subtotal</td>
+        <td class="subtotal-amount">${formatCurrency(calcCategorySubtotal(cat.items))}</td>
+      </tr>`;
+    return nameRow + itemRows + subtotalRow;
+  }).join('');
+
+  document.getElementById('print-area').innerHTML = `
+    <div class="print-doc">
+      <div class="print-header">
+        <div>Mr. ${escapeHtml(doc.clientName)}</div>
+        <div>Date: <strong>${formatDateLong(doc.date)}</strong></div>
+      </div>
+      <h2 class="print-title">Quotation</h2>
+      <table class="print-table">
+        <thead><tr><th>S. No.</th><th>Details</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+        <tfoot><tr><td colspan="4">Grand Total</td><td>${formatCurrency(calcQuotationGrandTotal(doc.categories))}</td></tr></tfoot>
+      </table>
+    </div>`;
 }
 
 /* ===== RENDER: LIST ===== */
