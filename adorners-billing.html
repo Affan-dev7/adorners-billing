@@ -133,6 +133,90 @@ function showScreen(name) {
   document.getElementById('screen-' + name).classList.remove('hidden');
 }
 
+/* ===== RENDER: VOUCHER EDITOR ===== */
+function openNewVoucher() {
+  currentDoc = { id: generateId(), type: 'voucher', clientName: '', date: todayIso(), entries: [] };
+  showScreen('voucher');
+  renderVoucherEditor();
+}
+
+function renderVoucherEditor() {
+  const d = currentDoc;
+  const rows = d.entries.map((entry, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td><input type="date" data-idx="${i}" data-field="date" value="${entry.date}"></td>
+      <td><input type="text" data-idx="${i}" data-field="detail" value="${escapeHtml(entry.detail)}"></td>
+      <td><input type="number" data-idx="${i}" data-field="amount" value="${entry.amount}"></td>
+      <td class="no-print"><button class="remove-row" data-idx="${i}">Remove</button></td>
+    </tr>`).join('');
+
+  document.getElementById('screen-voucher').innerHTML = `
+    <div class="no-print"><button id="back-btn">&larr; Back</button></div>
+    <h2>Payment Voucher</h2>
+    <div id="validation-msg" class="error hidden"></div>
+    <div class="field-row">
+      <div><label>Client Name</label><input type="text" id="f-client" value="${escapeHtml(d.clientName)}"></div>
+      <div><label>Date</label><input type="date" id="f-date" value="${d.date}"></div>
+    </div>
+    <table>
+      <thead><tr><th>S.No</th><th>Date</th><th>Detail</th><th>Amount</th><th class="no-print"></th></tr></thead>
+      <tbody id="entries-tbody">${rows}</tbody>
+      <tfoot><tr><td colspan="3">Total</td><td id="voucher-total">${formatCurrency(calcVoucherGrandTotal(d.entries))}</td><td class="no-print"></td></tr></tfoot>
+    </table>
+    <button class="no-print" id="add-row-btn">+ Add Row</button>
+    <div class="actions no-print">
+      <button class="primary" id="save-btn">Save</button>
+      <button id="pdf-btn">Download PDF</button>
+    </div>
+  `;
+  attachVoucherEditorEvents();
+}
+
+function attachVoucherEditorEvents() {
+  document.getElementById('back-btn').addEventListener('click', () => { showScreen('list'); renderList(); });
+
+  document.getElementById('f-client').addEventListener('input', e => { currentDoc.clientName = e.target.value; });
+  document.getElementById('f-date').addEventListener('input', e => { currentDoc.date = e.target.value; });
+
+  document.querySelectorAll('#entries-tbody input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = Number(e.target.dataset.idx);
+      const field = e.target.dataset.field;
+      currentDoc.entries[idx][field] = field === 'amount' ? Number(e.target.value) || 0 : e.target.value;
+      if (field === 'amount') {
+        document.getElementById('voucher-total').textContent = formatCurrency(calcVoucherGrandTotal(currentDoc.entries));
+      }
+    });
+  });
+
+  document.getElementById('add-row-btn').addEventListener('click', () => {
+    currentDoc.entries.push({ date: currentDoc.date, detail: '', amount: 0 });
+    renderVoucherEditor();
+  });
+
+  document.querySelectorAll('.remove-row').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      currentDoc.entries.splice(Number(e.target.dataset.idx), 1);
+      renderVoucherEditor();
+    });
+  });
+
+  document.getElementById('save-btn').addEventListener('click', () => {
+    const msg = document.getElementById('validation-msg');
+    if (!currentDoc.clientName.trim() || !currentDoc.date) {
+      msg.textContent = 'Client name and date are required.';
+      msg.classList.remove('hidden');
+      return;
+    }
+    msg.classList.add('hidden');
+    currentDoc.entries = currentDoc.entries.filter(e => e.detail.trim() || e.amount);
+    if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
+  });
+
+  document.getElementById('pdf-btn').addEventListener('click', () => window.print());
+}
+
 /* ===== RENDER: LIST ===== */
 function renderList(filter = '') {
   const docs = loadDocuments()
