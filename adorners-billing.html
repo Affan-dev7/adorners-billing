@@ -70,13 +70,15 @@
   .print-table th, .print-table td { border: 1px solid #333; padding: 6px 8px; text-align: left; vertical-align: top; }
   /* Browsers strip background colors when printing/exporting to PDF unless told
      not to (Chrome's "Background graphics" is unchecked by default) — without this,
-     the navy header and alternating row shading silently print as plain white/gray. */
-  .print-table thead th, .print-table tbody tr:nth-child(even) {
+     the navy header silently prints as plain white/gray. */
+  .print-table thead th {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    background: var(--navy);
+    color: #fff;
   }
-  .print-table thead th { background: var(--navy); color: #fff; }
-  .print-table tbody tr:nth-child(even) { background: var(--band); }
+  /* No alternating row shading in the printed output — every row stays plain white. */
+  .print-table tbody tr:nth-child(even) { background: none; }
   .print-table tfoot td { font-weight: bold; }
   .print-table tfoot tr.grand-total-row td { border-top: 2px solid #333; font-size: 14px; }
 
