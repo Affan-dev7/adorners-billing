@@ -86,10 +86,12 @@
   .print-table-quotation th:nth-child(4), .print-table-quotation td:nth-child(4) {
     width: 1%; white-space: nowrap;
   }
-  /* Amount also shrinks to its content, but with ~25% extra padding so it isn't
-     squeezed as tight as S.No/Qty/Rate — matches the requested "amount a bit bigger". */
+  /* Amount also shrinks to its content, but with extra trailing padding so it isn't
+     squeezed as tight as S.No/Qty/Rate. Left padding stays the same as every other
+     column so "Amount" still starts flush with the other headers — only padding-right
+     grows, which widens the column without shifting its text out of alignment. */
   .print-table-quotation th:nth-child(5), .print-table-quotation td:nth-child(5) {
-    width: 1%; white-space: nowrap; padding-left: 20px; padding-right: 20px;
+    width: 1%; white-space: nowrap; padding-right: 24px;
   }
 </style>
 </head>
