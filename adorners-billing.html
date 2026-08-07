@@ -302,6 +302,9 @@ function renderVoucherPrintView(doc) {
       </div>
       <h2 class="print-title">Payment Voucher</h2>
       <table class="print-table">
+        <colgroup>
+          <col style="width:8%"><col style="width:15%"><col style="width:52%"><col style="width:25%">
+        </colgroup>
         <thead><tr><th>S. No.</th><th>Date</th><th>Detail</th><th>Amount</th></tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr><td colspan="3">Total</td><td>${formatCurrency(calcVoucherGrandTotal(doc.entries))}</td></tr></tfoot>
@@ -586,6 +589,9 @@ function renderQuotationPrintView(doc) {
       </div>
       <h2 class="print-title">Quotation</h2>
       <table class="print-table">
+        <colgroup>
+          <col style="width:6%"><col style="width:44%"><col style="width:12%"><col style="width:14%"><col style="width:24%">
+        </colgroup>
         <thead><tr><th>S. No.</th><th>Details</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
