@@ -51,6 +51,7 @@
   .doc-row { display: flex; justify-content: space-between; padding: 10px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 8px; cursor: pointer; background: #fff; }
   .doc-row:hover { background: #eef1f7; }
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--band); }
+  .print-tip { font-size: 13px; color: #444; margin-top: 8px; }
 
   /* Print output is a separate, plain rendering (#print-area) built fresh from the
      document data — not the live editor form — so it can match the existing
@@ -259,6 +260,7 @@ function renderVoucherEditor() {
       <button class="primary" id="v-save-btn">Save</button>
       <button id="v-pdf-btn">Download PDF</button>
     </div>
+    <p class="print-tip no-print">Tip: in the print window, click "More settings" and turn <strong>Headers and footers OFF</strong>, <strong>Background graphics ON</strong>.</p>
   `;
   attachVoucherEditorEvents();
 }
@@ -427,6 +429,7 @@ function renderQuotationEditor() {
       <button class="primary" id="q-save-btn">Save</button>
       <button id="q-pdf-btn">Download PDF</button>
     </div>
+    <p class="print-tip no-print">Tip: in the print window, click "More settings" and turn <strong>Headers and footers OFF</strong>, <strong>Background graphics ON</strong>.</p>
   `;
   attachQuotationEditorEvents();
 }
