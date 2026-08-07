@@ -65,12 +65,26 @@
   .print-doc { font-family: 'Times New Roman', Georgia, serif; color: #000; }
   .print-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
   .print-title { text-align: center; text-decoration: underline; font-size: 18px; margin: 0 0 16px; }
-  .print-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .print-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
   .print-table th, .print-table td { border: 1px solid #333; padding: 6px 8px; text-align: left; vertical-align: top; }
   .print-table thead th { background: var(--navy); color: #fff; }
   .print-table tbody tr:nth-child(even) { background: var(--band); }
   .print-table tfoot td { font-weight: bold; }
   .print-table tfoot tr.grand-total-row td { border-top: 2px solid #333; font-size: 14px; }
+
+  /* Columns whose content is always short and fixed-format (S.No, Date, Qty) shrink
+     to fit that content instead of holding a wide fixed share and sitting mostly
+     empty. Detail/Details and Amount get no width rule at all, so the table's auto
+     layout gives them whatever's left based on their own actual content each time —
+     wide when there's a long description or a big number, narrower when there isn't. */
+  .print-table-voucher th:nth-child(1), .print-table-voucher td:nth-child(1),
+  .print-table-voucher th:nth-child(2), .print-table-voucher td:nth-child(2) {
+    width: 1%; white-space: nowrap;
+  }
+  .print-table-quotation th:nth-child(1), .print-table-quotation td:nth-child(1),
+  .print-table-quotation th:nth-child(3), .print-table-quotation td:nth-child(3) {
+    width: 1%; white-space: nowrap;
+  }
 </style>
 </head>
 <body>
@@ -301,10 +315,7 @@ function renderVoucherPrintView(doc) {
         <div>Date: <strong>${formatDateLong(doc.date)}</strong></div>
       </div>
       <h2 class="print-title">Payment Voucher</h2>
-      <table class="print-table">
-        <colgroup>
-          <col style="width:8%"><col style="width:15%"><col style="width:52%"><col style="width:25%">
-        </colgroup>
+      <table class="print-table print-table-voucher">
         <thead><tr><th>S. No.</th><th>Date</th><th>Detail</th><th>Amount</th></tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr><td colspan="3">Total</td><td>${formatCurrency(calcVoucherGrandTotal(doc.entries))}</td></tr></tfoot>
@@ -588,10 +599,7 @@ function renderQuotationPrintView(doc) {
         <div>Date: <strong>${formatDateLong(doc.date)}</strong></div>
       </div>
       <h2 class="print-title">Quotation</h2>
-      <table class="print-table">
-        <colgroup>
-          <col style="width:6%"><col style="width:44%"><col style="width:12%"><col style="width:14%"><col style="width:24%">
-        </colgroup>
+      <table class="print-table print-table-quotation">
         <thead><tr><th>S. No.</th><th>Details</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
