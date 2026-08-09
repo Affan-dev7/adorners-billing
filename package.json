@@ -1,0 +1,9 @@
+{
+  "name": "adorners-billing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for the Adorners billing tool: password gate + synced document storage.",
+  "dependencies": {
+    "@upstash/redis": "^1.34.3"
+  }
+}

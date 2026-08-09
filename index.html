@@ -116,7 +116,8 @@
 </head>
 <body>
 <div id="app">
-  <div id="screen-list" class="screen"></div>
+  <div id="screen-login" class="screen"></div>
+  <div id="screen-list" class="screen hidden"></div>
   <div id="screen-ledger" class="screen hidden"></div>
   <div id="screen-categorized" class="screen hidden"></div>
 </div>
@@ -164,40 +165,73 @@ const DOC_TYPES = {
   billing:   { kind: 'categorized', heading: 'Billing' },
 };
 
-/* ===== STORAGE ===== */
-const STORAGE_KEY = 'adorners_billing_documents';
+/* ===== STORAGE =====
+   Documents live server-side (one shared JSON blob via /api/documents), not in
+   this browser's localStorage — so the same saved documents show up on every
+   device instead of being stuck on whichever phone/computer created them.
+   documentsCache holds the current copy in memory; loadDocuments()/getDocument()
+   read from it synchronously (unchanged call sites), while saveDocument() is now
+   async — it updates the cache immediately, then persists it to the server. */
+let documentsCache = [];
 
-function loadDocuments() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (err) {
-    alert('Could not read saved documents: ' + err.message);
-    return [];
-  }
+async function fetchDocumentsFromServer() {
+  // Cache-buster query param defeats any HTTP caching between here and the
+  // server (browser, CDN, proxy) — otherwise a device can briefly see a stale
+  // list right after another device just saved something.
+  const res = await fetch('/api/documents?_=' + Date.now(), { cache: 'no-store' });
+  if (res.status === 401) return 'unauthorized';
+  if (!res.ok) throw new Error('Server returned ' + res.status);
+  documentsCache = await res.json();
+  return 'ok';
 }
 
-function saveDocument(doc) {
+function loadDocuments() {
+  return documentsCache;
+}
+
+async function saveDocument(doc) {
+  doc.updatedAt = new Date().toISOString();
+  const idx = documentsCache.findIndex(d => d.id === doc.id);
+  if (idx === -1) {
+    doc.createdAt = doc.updatedAt;
+    documentsCache.push(doc);
+  } else {
+    documentsCache[idx] = doc;
+  }
   try {
-    const docs = loadDocuments();
-    doc.updatedAt = new Date().toISOString();
-    const idx = docs.findIndex(d => d.id === doc.id);
-    if (idx === -1) {
-      doc.createdAt = doc.updatedAt;
-      docs.push(doc);
-    } else {
-      docs[idx] = doc;
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
+    const res = await fetch('/api/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(documentsCache),
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
     return true;
   } catch (err) {
-    alert('Could not save document: ' + err.message);
+    alert('Could not save document — it may not show up on your other devices: ' + err.message);
     return false;
   }
 }
 
 function getDocument(id) {
   return loadDocuments().find(d => d.id === id) || null;
+}
+
+async function deleteDocument(id) {
+  const before = documentsCache.length;
+  documentsCache = documentsCache.filter(d => d.id !== id);
+  if (documentsCache.length === before) return true; // already gone, nothing to persist
+  try {
+    const res = await fetch('/api/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(documentsCache),
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    return true;
+  } catch (err) {
+    alert('Could not delete document: ' + err.message);
+    return false;
+  }
 }
 
 function generateId() {
@@ -326,9 +360,9 @@ function attachLedgerEditorEvents() {
     });
   });
 
-  document.getElementById('v-save-btn').addEventListener('click', () => {
+  document.getElementById('v-save-btn').addEventListener('click', async () => {
     if (!validateLedgerForSave()) return;
-    if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
+    if (await saveDocument(currentDoc)) { showScreen('list'); renderList(); }
   });
 
   document.getElementById('v-pdf-btn').addEventListener('click', () => {
@@ -357,9 +391,9 @@ function validateLedgerForSave() {
 // Snapshots the current Expense Tracker into a brand-new Quotation or Billing
 // document — the Expense Tracker itself is untouched. Each expense line becomes
 // its own category with one item inside it (Qty 1, Rate = the expense amount).
-function convertExpenseToDocument(targetType) {
+async function convertExpenseToDocument(targetType) {
   if (!validateLedgerForSave()) return;
-  saveDocument(currentDoc);
+  await saveDocument(currentDoc);
 
   const newDoc = {
     id: generateId(),
@@ -373,7 +407,7 @@ function convertExpenseToDocument(targetType) {
     summary: { quotationApprovalAmount: 0, paymentReceived: 0, adjustments: [] },
   };
 
-  if (saveDocument(newDoc)) {
+  if (await saveDocument(newDoc)) {
     currentDoc = newDoc;
     showScreen('categorized');
     renderCategorizedEditor();
@@ -599,7 +633,7 @@ function attachCategorizedEditorEvents() {
     });
   });
 
-  document.getElementById('q-save-btn').addEventListener('click', () => {
+  document.getElementById('q-save-btn').addEventListener('click', async () => {
     const msg = document.getElementById('q-validation-msg');
     if (!currentDoc.clientName.trim() || !currentDoc.date) {
       msg.textContent = 'Client name and date are required.';
@@ -611,7 +645,7 @@ function attachCategorizedEditorEvents() {
       .map(cat => ({ ...cat, items: cat.items.filter(i => i.description.trim() || i.qty || i.rate) }))
       .filter(cat => cat.name.trim() && cat.items.length > 0);
     currentDoc.summary.adjustments = currentDoc.summary.adjustments.filter(a => a.label.trim() || a.amount);
-    if (saveDocument(currentDoc)) { showScreen('list'); renderList(); }
+    if (await saveDocument(currentDoc)) { showScreen('list'); renderList(); }
   });
 
   document.getElementById('q-pdf-btn').addEventListener('click', () => {
@@ -716,7 +750,10 @@ function renderList(filter = '') {
           <span class="badge">${DOC_TYPES[d.type].heading}</span>
           <div style="font-size:13px;color:#666;">${d.date}</div>
         </div>
-        <div>${formatCurrency(total)}</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div>${formatCurrency(total)}</div>
+          <button class="delete-doc-btn" data-id="${d.id}" data-client="${escapeHtml(d.clientName)}" style="color:var(--error);border-color:var(--error);">Delete</button>
+        </div>
       </div>`;
   }).join('') || '<p style="color:#666;">No documents yet.</p>';
 
@@ -742,6 +779,16 @@ function renderList(filter = '') {
   document.querySelectorAll('.doc-row').forEach(row => {
     row.addEventListener('click', () => openExistingDocument(row.dataset.id, row.dataset.type));
   });
+  document.querySelectorAll('.delete-doc-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = confirm(`Delete the document for "${btn.dataset.client}"? This can't be undone.`);
+      if (!ok) return;
+      if (await deleteDocument(btn.dataset.id)) {
+        renderList(document.getElementById('search-input').value);
+      }
+    });
+  });
 }
 
 function openExistingDocument(id, type) {
@@ -751,12 +798,69 @@ function openExistingDocument(id, type) {
   else { normalizeCategorized(currentDoc); showScreen('categorized'); renderCategorizedEditor(); }
 }
 
-/* ===== INIT ===== */
-function init() {
-  showScreen('list');
-  renderList();
+/* ===== RENDER: LOGIN ===== */
+function renderLoginScreen(errorMsg) {
+  document.getElementById('screen-login').innerHTML = `
+    <div style="max-width:320px;margin:80px auto;text-align:center;">
+      <h1 style="font-size:22px;">Adorners Billing</h1>
+      <div id="login-error" class="error${errorMsg ? '' : ' hidden'}" style="text-align:left;">${escapeHtml(errorMsg || '')}</div>
+      <div style="text-align:left;margin-bottom:16px;">
+        <label>Username</label>
+        <input type="text" id="login-username" autocomplete="username">
+      </div>
+      <div style="text-align:left;margin-bottom:16px;">
+        <label>Password</label>
+        <input type="password" id="login-password" autocomplete="current-password">
+      </div>
+      <button class="primary" id="login-btn" style="width:100%;">Enter</button>
+    </div>`;
+  document.getElementById('login-btn').addEventListener('click', submitLogin);
+  document.getElementById('login-username').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('login-password').focus();
+  });
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitLogin();
+  });
+  document.getElementById('login-username').focus();
 }
-init();
+
+async function submitLogin() {
+  const username = document.getElementById('login-username').value;
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (res.ok) {
+      await bootApp();
+    } else {
+      const body = await res.json().catch(() => ({}));
+      renderLoginScreen(body.error || 'Wrong username or password.');
+    }
+  } catch (err) {
+    renderLoginScreen('Network error: ' + err.message);
+  }
+}
+
+/* ===== INIT ===== */
+async function bootApp() {
+  const status = await fetchDocumentsFromServer().catch(err => 'error:' + err.message);
+  if (status === 'ok') {
+    showScreen('list');
+    renderList();
+  } else if (status === 'unauthorized') {
+    showScreen('login');
+    renderLoginScreen();
+  } else {
+    showScreen('login');
+    renderLoginScreen('Could not connect: ' + String(status).replace(/^error:/, ''));
+  }
+}
+bootApp();
 </script>
 </body>
 </html>
