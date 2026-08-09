@@ -20,6 +20,14 @@
   }
   #app { max-width: 900px; margin: 0 auto; padding: 24px; }
   .screen.hidden { display: none; }
+  /* On a phone, the table (dates/amounts/remove button) is wider than the screen.
+     Scrolling just the table horizontally keeps the rest of the page (buttons,
+     fields) usable without the whole page breaking sideways. */
+  .table-scroll { overflow-x: auto; margin-bottom: 12px; }
+  .table-scroll table { margin-bottom: 0; }
+  @media (max-width: 600px) {
+    #app { padding: 12px; }
+  }
   h1, h2 { margin: 0 0 16px; }
   button {
     font: inherit;
@@ -271,11 +279,13 @@ function renderLedgerEditor() {
       <div><label>Client Name</label><input type="text" id="v-f-client" value="${escapeHtml(d.clientName)}"></div>
       <div><label>Date</label><input type="date" id="v-f-date" value="${d.date}"></div>
     </div>
-    <table>
-      <thead><tr><th>S.No</th><th>Date</th><th>Detail</th><th>Amount</th><th class="no-print"></th></tr></thead>
-      <tbody id="entries-tbody">${rows}</tbody>
-      <tfoot><tr><td colspan="3">Total</td><td id="voucher-total">${formatCurrency(calcLedgerGrandTotal(d.entries))}</td><td class="no-print"></td></tr></tfoot>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>S.No</th><th>Date</th><th>Detail</th><th>Amount</th><th class="no-print"></th></tr></thead>
+        <tbody id="entries-tbody">${rows}</tbody>
+        <tfoot><tr><td colspan="3">Total</td><td id="voucher-total">${formatCurrency(calcLedgerGrandTotal(d.entries))}</td><td class="no-print"></td></tr></tfoot>
+      </table>
+    </div>
     <button class="no-print" id="add-row-btn">+ Add Row</button>
     <div class="actions no-print">
       <button class="primary" id="v-save-btn">Save</button>
@@ -438,11 +448,13 @@ function renderCategorizedEditor() {
           </div>
           <button class="no-print remove-category" data-ci="${ci}">Remove Category</button>
         </div>
-        <table>
-          <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Amount</th><th class="no-print"></th></tr></thead>
-          <tbody>${itemRows}</tbody>
-          <tfoot><tr><td colspan="4">Subtotal</td><td class="category-subtotal" data-ci="${ci}">${formatCurrency(calcCategorySubtotal(cat.items))}</td><td class="no-print"></td></tr></tfoot>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Amount</th><th class="no-print"></th></tr></thead>
+            <tbody>${itemRows}</tbody>
+            <tfoot><tr><td colspan="4">Subtotal</td><td class="category-subtotal" data-ci="${ci}">${formatCurrency(calcCategorySubtotal(cat.items))}</td><td class="no-print"></td></tr></tfoot>
+          </table>
+        </div>
         <button class="no-print add-item-btn" data-ci="${ci}">+ Add Item</button>
       </div>`;
   }).join('');
