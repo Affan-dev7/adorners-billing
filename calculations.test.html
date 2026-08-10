@@ -69,6 +69,38 @@
   assertEqual(groupEntriesByDate([]).length, 0, 'groupEntriesByDate: empty list');
   assertEqual(calcLedgerGrandTotal(dailyEntries), 28000, 'calcLedgerGrandTotal: reused for daily entries grand total');
 
+  const byPerson = groupByPaidTo(dailyEntries);
+  assertEqual(byPerson.length, 3, 'groupByPaidTo: three distinct recipients');
+  assertEqual(byPerson[0].paidTo, 'Vendor', 'groupByPaidTo: Vendor first (highest total)');
+  assertEqual(byPerson[0].total, 23000, 'groupByPaidTo: Vendor total (8000+15000)');
+  assertEqual(byPerson[1].paidTo, 'Plumber', 'groupByPaidTo: Plumber second (3000 > Labor 2000)');
+  assertEqual(byPerson[1].total, 3000, 'groupByPaidTo: Plumber total');
+  assertEqual(byPerson[2].paidTo, 'Labor', 'groupByPaidTo: Labor third');
+  assertEqual(byPerson[2].total, 2000, 'groupByPaidTo: Labor total (1000+1000)');
+  assertEqual(groupByPaidTo([]).length, 0, 'groupByPaidTo: empty list');
+  assertEqual(
+    groupByPaidTo([{ paidTo: '', detail: 'x', amount: 500 }])[0].paidTo,
+    '(unspecified)',
+    'groupByPaidTo: blank paidTo falls back to (unspecified)'
+  );
+
+  const converted = groupEntriesForConversion(dailyEntries);
+  assertEqual(converted.length, 3, 'groupEntriesForConversion: three categories (Labor/Vendor/Plumber)');
+  const laborCat = converted.find(c => c.name === 'Labor');
+  assertEqual(laborCat.items.length, 2, 'groupEntriesForConversion: Labor category has both Labor entries as items');
+  assertEqual(
+    calcCategorySubtotal(laborCat.items),
+    2000,
+    'groupEntriesForConversion: Labor category subtotal (1000+1000), same math as the categorized kind'
+  );
+  const vendorCat = converted.find(c => c.name === 'Vendor');
+  assertEqual(vendorCat.items.length, 2, 'groupEntriesForConversion: Vendor category has both Vendor entries as items');
+  assertEqual(
+    calcCategorizedGrandTotal(converted),
+    28000,
+    'groupEntriesForConversion: grand total via calcCategorizedGrandTotal matches original entries total'
+  );
+
   document.getElementById('output').textContent = results.join('\n');
   const failed = results.filter(r => r.startsWith('FAIL'));
   document.title = failed.length
