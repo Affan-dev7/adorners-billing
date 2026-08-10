@@ -169,6 +169,39 @@ function groupEntriesByDate(entries) {
   }));
 }
 
+// Totals Daily Expense Tracker entries by recipient regardless of date —
+// "how much has gone to Labor overall" vs groupEntriesByDate's "what happened
+// on this day". Sorted by total descending (biggest recipient first).
+function groupByPaidTo(entries) {
+  const byPerson = {};
+  for (const entry of entries) {
+    const key = entry.paidTo.trim() || '(unspecified)';
+    byPerson[key] = (byPerson[key] || 0) + entry.amount;
+  }
+  return Object.entries(byPerson)
+    .map(([paidTo, total]) => ({ paidTo, total }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Turns flat Daily Expense Tracker entries into Categorized-shape categories
+// (for the "Save as Quotation/Billing" conversion) — one category per unique
+// recipient, with every payment to them as its own line item inside it,
+// instead of a separate category per entry (which would show "Labor" three
+// times over for three separate payments to Labor).
+function groupEntriesForConversion(entries) {
+  const byPerson = {};
+  const order = [];
+  for (const entry of entries) {
+    const key = entry.paidTo.trim() || entry.detail.trim() || '(untitled)';
+    if (!byPerson[key]) { byPerson[key] = []; order.push(key); }
+    byPerson[key].push(entry);
+  }
+  return order.map(name => ({
+    name,
+    items: byPerson[name].map(e => ({ description: e.detail, qty: 1, unit: '', rate: e.amount })),
+  }));
+}
+
 /* ===== DOCUMENT TYPES =====
    Three shapes ("kinds"):
    - "ledger": Date/Detail/Amount rows + running total -> Payment Voucher, Expense Tracker
@@ -471,6 +504,22 @@ function openNewDaily() {
   renderDailyEditor();
 }
 
+// "How much has gone to Labor/Vendor/Plumber overall" — shared markup used by
+// both the live editor summary and refreshDailySummary()'s live updates.
+function renderPaidToSummaryRows(entries) {
+  const totals = groupByPaidTo(entries);
+  if (totals.length === 0) return '<p style="color:#666;margin:8px 0 0;">No entries yet.</p>';
+  return totals.map(t => `
+    <div style="display:flex;justify-content:space-between;padding:4px 0;">
+      <div>${escapeHtml(t.paidTo)}</div>
+      <div><strong>${formatCurrency(t.total)}</strong></div>
+    </div>`).join('');
+}
+
+function refreshDailySummary() {
+  document.getElementById('daily-paidto-summary').innerHTML = renderPaidToSummaryRows(currentDoc.entries);
+}
+
 function renderDailyEditor() {
   const d = currentDoc;
   const rows = d.entries.map((entry, i) => `
@@ -499,6 +548,12 @@ function renderDailyEditor() {
       </table>
     </div>
     <button class="no-print" id="add-daily-row-btn">+ Add Entry</button>
+
+    <div style="margin-top:20px;border:1px solid var(--border);border-radius:4px;padding:12px;">
+      <label style="font-size:15px;font-weight:bold;color:#1a1a1a;">Paid To Summary</label>
+      <div id="daily-paidto-summary">${renderPaidToSummaryRows(d.entries)}</div>
+    </div>
+
     <div class="actions no-print">
       <button class="primary" id="dy-save-btn">Save</button>
       <button id="dy-pdf-btn">Download PDF</button>
@@ -522,6 +577,9 @@ function attachDailyEditorEvents() {
       currentDoc.entries[idx][field] = field === 'amount' ? Number(e.target.value) || 0 : e.target.value;
       if (field === 'amount') {
         document.getElementById('daily-total').textContent = formatCurrency(calcLedgerGrandTotal(currentDoc.entries));
+      }
+      if (field === 'amount' || field === 'paidTo') {
+        refreshDailySummary();
       }
     });
   });
@@ -565,8 +623,9 @@ function validateDailyForSave() {
 }
 
 // Snapshots the current Daily Expense Tracker into a brand-new Quotation or
-// Billing document — the tracker itself is untouched. Each entry becomes its
-// own category (named after who it was paid to) with one item inside it.
+// Billing document — the tracker itself is untouched. All payments to the
+// same recipient land in one category together (via groupEntriesForConversion),
+// not scattered across separate categories per entry.
 async function convertDailyToDocument(targetType) {
   if (!validateDailyForSave()) return;
   await saveDocument(currentDoc);
@@ -576,10 +635,7 @@ async function convertDailyToDocument(targetType) {
     type: targetType,
     clientName: currentDoc.clientName,
     date: currentDoc.date,
-    categories: currentDoc.entries.map(entry => ({
-      name: entry.paidTo || entry.detail || '(untitled)',
-      items: [{ description: entry.detail, qty: 1, unit: '', rate: entry.amount }],
-    })),
+    categories: groupEntriesForConversion(currentDoc.entries),
     summary: { quotationApprovalAmount: 0, paymentReceived: 0, adjustments: [] },
   };
 
@@ -609,6 +665,10 @@ function renderDailyPrintView(doc) {
     return dayHeaderRow + entryRows + dayTotalRow;
   }).join('');
 
+  const summaryRows = groupByPaidTo(doc.entries).map(t => `
+    <tr><td>${escapeHtml(t.paidTo)}</td><td>${formatCurrency(t.total)}</td></tr>`
+  ).join('');
+
   document.getElementById('print-area').innerHTML = `
     <div class="print-doc">
       <div class="print-header">
@@ -620,6 +680,12 @@ function renderDailyPrintView(doc) {
         <thead><tr><th>Paid To</th><th>Detail</th><th>Amount</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot><tr class="grand-total-row"><td colspan="2">Grand Total</td><td>${formatCurrency(calcLedgerGrandTotal(doc.entries))}</td></tr></tfoot>
+      </table>
+
+      <h3 style="margin:24px 0 8px;">Paid To Summary</h3>
+      <table class="print-table">
+        <thead><tr><th>Paid To</th><th>Total</th></tr></thead>
+        <tbody>${summaryRows}</tbody>
       </table>
     </div>`;
 }
