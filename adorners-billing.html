@@ -120,6 +120,7 @@
   <div id="screen-list" class="screen hidden"></div>
   <div id="screen-ledger" class="screen hidden"></div>
   <div id="screen-categorized" class="screen hidden"></div>
+  <div id="screen-daily" class="screen hidden"></div>
 </div>
 <div id="print-area" class="print-only"></div>
 
@@ -152,17 +153,35 @@ function calcBalance(totalAmount, paymentReceived, adjustments) {
   return adjustments.reduce((balance, adj) => balance - adj.amount, totalAmount - paymentReceived);
 }
 
+// Groups flat Daily Expense Tracker entries by date, sorted chronologically,
+// each with its own subtotal — the grouping/subtotal is purely a display
+// concern, entries themselves stay a flat list for simple data entry.
+function groupEntriesByDate(entries) {
+  const byDate = {};
+  for (const entry of entries) {
+    if (!byDate[entry.date]) byDate[entry.date] = [];
+    byDate[entry.date].push(entry);
+  }
+  return Object.keys(byDate).sort().map(date => ({
+    date,
+    entries: byDate[date],
+    subtotal: calcLedgerGrandTotal(byDate[date]),
+  }));
+}
+
 /* ===== DOCUMENT TYPES =====
-   Two shapes ("kinds"), each shared by two document types that only differ in
-   heading/label:
+   Three shapes ("kinds"):
    - "ledger": Date/Detail/Amount rows + running total -> Payment Voucher, Expense Tracker
    - "categorized": Category -> Items -> Qty/Rate/Amount -> subtotals -> grand total,
-     with the optional approval/payment/adjustments summary -> Quotation, Billing */
+     with the optional approval/payment/adjustments summary -> Quotation, Billing
+   - "daily": Date/Paid To/Detail/Amount rows, entered as a flat list but grouped by
+     date (with a subtotal per day) for viewing/printing -> Daily Expense Tracker */
 const DOC_TYPES = {
-  voucher:   { kind: 'ledger',      heading: 'Payment Voucher' },
-  expense:   { kind: 'ledger',      heading: 'Expense Tracker' },
-  quotation: { kind: 'categorized', heading: 'Quotation' },
-  billing:   { kind: 'categorized', heading: 'Billing' },
+  voucher:      { kind: 'ledger',      heading: 'Payment Voucher' },
+  expense:      { kind: 'ledger',      heading: 'Expense Tracker' },
+  quotation:    { kind: 'categorized', heading: 'Quotation' },
+  billing:      { kind: 'categorized', heading: 'Billing' },
+  dailyExpense: { kind: 'daily',       heading: 'Daily Expense Tracker' },
 };
 
 /* ===== STORAGE =====
@@ -438,6 +457,169 @@ function renderLedgerPrintView(doc) {
         <thead><tr><th>S. No.</th><th>Date</th><th>Detail</th><th>Amount</th></tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr><td colspan="3">Total</td><td>${formatCurrency(calcLedgerGrandTotal(doc.entries))}</td></tr></tfoot>
+      </table>
+    </div>`;
+}
+
+/* ===== RENDER: DAILY EDITOR (Daily Expense Tracker) =====
+   A flat list of entries, same "+ Add Entry" pattern as the Ledger editor,
+   just with an extra "Paid To" field — you don't manually group entries into
+   days, the app sorts that out for viewing/printing (see groupEntriesByDate). */
+function openNewDaily() {
+  currentDoc = { id: generateId(), type: 'dailyExpense', clientName: '', date: todayIso(), entries: [] };
+  showScreen('daily');
+  renderDailyEditor();
+}
+
+function renderDailyEditor() {
+  const d = currentDoc;
+  const rows = d.entries.map((entry, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td><input type="date" data-idx="${i}" data-field="date" value="${entry.date}"></td>
+      <td><input type="text" data-idx="${i}" data-field="paidTo" value="${escapeHtml(entry.paidTo)}" placeholder="e.g. Labor"></td>
+      <td><input type="text" data-idx="${i}" data-field="detail" value="${escapeHtml(entry.detail)}"></td>
+      <td><input type="number" data-idx="${i}" data-field="amount" value="${entry.amount}"></td>
+      <td class="no-print"><button class="remove-daily-row" data-idx="${i}">Remove</button></td>
+    </tr>`).join('');
+
+  document.getElementById('screen-daily').innerHTML = `
+    <div class="no-print"><button id="dy-back-btn">&larr; Back</button></div>
+    <h2>Daily Expense Tracker</h2>
+    <div id="dy-validation-msg" class="error hidden"></div>
+    <div class="field-row">
+      <div><label>Project / Client Name</label><input type="text" id="dy-f-client" value="${escapeHtml(d.clientName)}"></div>
+      <div><label>Date</label><input type="date" id="dy-f-date" value="${d.date}"></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>S.No</th><th>Date</th><th>Paid To</th><th>Detail</th><th>Amount</th><th class="no-print"></th></tr></thead>
+        <tbody id="daily-entries-tbody">${rows}</tbody>
+        <tfoot><tr><td colspan="4">Grand Total</td><td id="daily-total">${formatCurrency(calcLedgerGrandTotal(d.entries))}</td><td class="no-print"></td></tr></tfoot>
+      </table>
+    </div>
+    <button class="no-print" id="add-daily-row-btn">+ Add Entry</button>
+    <div class="actions no-print">
+      <button class="primary" id="dy-save-btn">Save</button>
+      <button id="dy-pdf-btn">Download PDF</button>
+      <button id="dy-save-as-quotation-btn">Save as Quotation</button>
+      <button id="dy-save-as-billing-btn">Save as Billing</button>
+    </div>
+    <p class="print-tip no-print">Tip: in the print window, click "More settings" and turn <strong>Headers and footers OFF</strong>, <strong>Background graphics ON</strong>.</p>
+  `;
+  attachDailyEditorEvents();
+}
+
+function attachDailyEditorEvents() {
+  document.getElementById('dy-back-btn').addEventListener('click', () => { showScreen('list'); renderList(); });
+  document.getElementById('dy-f-client').addEventListener('input', e => { currentDoc.clientName = e.target.value; });
+  document.getElementById('dy-f-date').addEventListener('input', e => { currentDoc.date = e.target.value; });
+
+  document.querySelectorAll('#daily-entries-tbody input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = Number(e.target.dataset.idx);
+      const field = e.target.dataset.field;
+      currentDoc.entries[idx][field] = field === 'amount' ? Number(e.target.value) || 0 : e.target.value;
+      if (field === 'amount') {
+        document.getElementById('daily-total').textContent = formatCurrency(calcLedgerGrandTotal(currentDoc.entries));
+      }
+    });
+  });
+
+  document.getElementById('add-daily-row-btn').addEventListener('click', () => {
+    currentDoc.entries.push({ date: currentDoc.date, paidTo: '', detail: '', amount: 0 });
+    renderDailyEditor();
+  });
+
+  document.querySelectorAll('.remove-daily-row').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      currentDoc.entries.splice(Number(e.target.dataset.idx), 1);
+      renderDailyEditor();
+    });
+  });
+
+  document.getElementById('dy-save-btn').addEventListener('click', async () => {
+    if (!validateDailyForSave()) return;
+    if (await saveDocument(currentDoc)) { showScreen('list'); renderList(); }
+  });
+
+  document.getElementById('dy-pdf-btn').addEventListener('click', () => {
+    renderDailyPrintView(currentDoc);
+    window.print();
+  });
+
+  document.getElementById('dy-save-as-quotation-btn').addEventListener('click', () => convertDailyToDocument('quotation'));
+  document.getElementById('dy-save-as-billing-btn').addEventListener('click', () => convertDailyToDocument('billing'));
+}
+
+function validateDailyForSave() {
+  const msg = document.getElementById('dy-validation-msg');
+  if (!currentDoc.clientName.trim() || !currentDoc.date) {
+    msg.textContent = 'Client name and date are required.';
+    msg.classList.remove('hidden');
+    return false;
+  }
+  msg.classList.add('hidden');
+  currentDoc.entries = currentDoc.entries.filter(e => e.paidTo.trim() || e.detail.trim() || e.amount);
+  return true;
+}
+
+// Snapshots the current Daily Expense Tracker into a brand-new Quotation or
+// Billing document — the tracker itself is untouched. Each entry becomes its
+// own category (named after who it was paid to) with one item inside it.
+async function convertDailyToDocument(targetType) {
+  if (!validateDailyForSave()) return;
+  await saveDocument(currentDoc);
+
+  const newDoc = {
+    id: generateId(),
+    type: targetType,
+    clientName: currentDoc.clientName,
+    date: currentDoc.date,
+    categories: currentDoc.entries.map(entry => ({
+      name: entry.paidTo || entry.detail || '(untitled)',
+      items: [{ description: entry.detail, qty: 1, unit: '', rate: entry.amount }],
+    })),
+    summary: { quotationApprovalAmount: 0, paymentReceived: 0, adjustments: [] },
+  };
+
+  if (await saveDocument(newDoc)) {
+    currentDoc = newDoc;
+    showScreen('categorized');
+    renderCategorizedEditor();
+  }
+}
+
+/* ===== PRINT: DAILY (Daily Expense Tracker) =====
+   Grouped by date (via groupEntriesByDate) with a subtotal per day and a
+   grand total at the end — matches how a cash disbursement log actually
+   reads: what happened on which day, not just a flat list of amounts. */
+function renderDailyPrintView(doc) {
+  const groups = groupEntriesByDate(doc.entries);
+
+  const rowsHtml = groups.map(group => {
+    const dayHeaderRow = `<tr><td colspan="3"><strong>${formatDateLong(group.date)}</strong></td></tr>`;
+    const entryRows = group.entries.map(entry => `
+      <tr>
+        <td>${escapeHtml(entry.paidTo)}</td>
+        <td>${escapeHtml(entry.detail)}</td>
+        <td>${formatCurrency(entry.amount)}</td>
+      </tr>`).join('');
+    const dayTotalRow = `<tr><td colspan="2"><strong>Day Total</strong></td><td><strong>${formatCurrency(group.subtotal)}</strong></td></tr>`;
+    return dayHeaderRow + entryRows + dayTotalRow;
+  }).join('');
+
+  document.getElementById('print-area').innerHTML = `
+    <div class="print-doc">
+      <div class="print-header">
+        <div>Mr. ${escapeHtml(doc.clientName)}</div>
+        <div>Date: <strong>${formatDateLong(doc.date)}</strong></div>
+      </div>
+      <h2 class="print-title">Daily Expense Tracker</h2>
+      <table class="print-table">
+        <thead><tr><th>Paid To</th><th>Detail</th><th>Amount</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+        <tfoot><tr class="grand-total-row"><td colspan="2">Grand Total</td><td>${formatCurrency(calcLedgerGrandTotal(doc.entries))}</td></tr></tfoot>
       </table>
     </div>`;
 }
@@ -740,7 +922,8 @@ function renderList(filter = '') {
     .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 
   const rows = docs.map(d => {
-    const total = DOC_TYPES[d.type].kind === 'ledger'
+    const kind = DOC_TYPES[d.type].kind;
+    const total = (kind === 'ledger' || kind === 'daily')
       ? calcLedgerGrandTotal(d.entries)
       : calcCategorizedGrandTotal(d.categories);
     return `
@@ -762,6 +945,7 @@ function renderList(filter = '') {
     <div class="actions">
       <button class="primary" id="new-voucher-btn">+ New Payment Voucher</button>
       <button class="primary" id="new-expense-btn">+ New Expense Tracker</button>
+      <button class="primary" id="new-daily-btn">+ New Daily Expense Tracker</button>
       <button class="primary" id="new-quotation-btn">+ New Quotation</button>
       <button class="primary" id="new-billing-btn">+ New Billing</button>
     </div>
@@ -773,6 +957,7 @@ function renderList(filter = '') {
 
   document.getElementById('new-voucher-btn').addEventListener('click', () => openNewLedger('voucher'));
   document.getElementById('new-expense-btn').addEventListener('click', () => openNewLedger('expense'));
+  document.getElementById('new-daily-btn').addEventListener('click', () => openNewDaily());
   document.getElementById('new-quotation-btn').addEventListener('click', () => openNewCategorized('quotation'));
   document.getElementById('new-billing-btn').addEventListener('click', () => openNewCategorized('billing'));
   document.getElementById('search-input').addEventListener('input', (e) => renderList(e.target.value));
@@ -794,7 +979,9 @@ function renderList(filter = '') {
 function openExistingDocument(id, type) {
   currentDoc = getDocument(id);
   if (!currentDoc) return;
-  if (DOC_TYPES[type].kind === 'ledger') { showScreen('ledger'); renderLedgerEditor(); }
+  const kind = DOC_TYPES[type].kind;
+  if (kind === 'ledger') { showScreen('ledger'); renderLedgerEditor(); }
+  else if (kind === 'daily') { showScreen('daily'); renderDailyEditor(); }
   else { normalizeCategorized(currentDoc); showScreen('categorized'); renderCategorizedEditor(); }
 }
 
