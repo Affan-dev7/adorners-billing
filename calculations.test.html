@@ -22,20 +22,20 @@
   assertEqual(calcCategorySubtotal([]), 0, 'calcCategorySubtotal: empty list');
 
   assertEqual(
-    calcQuotationGrandTotal([
+    calcCategorizedGrandTotal([
       { items: [{ qty: 30, rate: 7200 }, { qty: 1, rate: 6000 }] },
       { items: [{ qty: 1, rate: 28000 }] }
     ]),
     250000,
-    'calcQuotationGrandTotal: two categories'
+    'calcCategorizedGrandTotal: two categories'
   );
 
   assertEqual(
-    calcVoucherGrandTotal([{ amount: 300000 }, { amount: 200000 }, { amount: 50000 }]),
+    calcLedgerGrandTotal([{ amount: 300000 }, { amount: 200000 }, { amount: 50000 }]),
     550000,
-    'calcVoucherGrandTotal: three entries'
+    'calcLedgerGrandTotal: three entries'
   );
-  assertEqual(calcVoucherGrandTotal([]), 0, 'calcVoucherGrandTotal: empty list');
+  assertEqual(calcLedgerGrandTotal([]), 0, 'calcLedgerGrandTotal: empty list');
 
   assertEqual(calcTotalAmount(1691640, 3350000), 5041640, 'calcTotalAmount: matches Mairaj Bhai bill');
   assertEqual(calcTotalAmount(100000, 0), 100000, 'calcTotalAmount: no prior approval amount');
@@ -51,6 +51,23 @@
     650,
     'calcBalance: multiple adjustments'
   );
+
+  const dailyEntries = [
+    { date: '2026-08-10', paidTo: 'Labor', detail: 'Foundation work', amount: 1000 },
+    { date: '2026-08-11', paidTo: 'Vendor', detail: 'Sand delivery', amount: 8000 },
+    { date: '2026-08-10', paidTo: 'Labor', detail: 'Afternoon top-up', amount: 1000 },
+    { date: '2026-08-10', paidTo: 'Vendor', detail: 'Cement delivery', amount: 15000 },
+    { date: '2026-08-10', paidTo: 'Plumber', detail: 'Pipe fitting', amount: 3000 },
+  ];
+  const grouped = groupEntriesByDate(dailyEntries);
+  assertEqual(grouped.length, 2, 'groupEntriesByDate: two distinct dates');
+  assertEqual(grouped[0].date, '2026-08-10', 'groupEntriesByDate: sorted chronologically (10th first)');
+  assertEqual(grouped[0].entries.length, 4, 'groupEntriesByDate: four entries on the 10th');
+  assertEqual(grouped[0].subtotal, 20000, 'groupEntriesByDate: 10th subtotal (1000+1000+15000+3000)');
+  assertEqual(grouped[1].date, '2026-08-11', 'groupEntriesByDate: second date is the 11th');
+  assertEqual(grouped[1].subtotal, 8000, 'groupEntriesByDate: 11th subtotal');
+  assertEqual(groupEntriesByDate([]).length, 0, 'groupEntriesByDate: empty list');
+  assertEqual(calcLedgerGrandTotal(dailyEntries), 28000, 'calcLedgerGrandTotal: reused for daily entries grand total');
 
   document.getElementById('output').textContent = results.join('\n');
   const failed = results.filter(r => r.startsWith('FAIL'));
