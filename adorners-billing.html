@@ -94,8 +94,7 @@
      to fit that content instead of holding a wide fixed share and sitting mostly
      empty. Detail/Details get no width rule at all, so the table's auto layout gives
      it whatever's left based on its own actual content each time. Shared by both
-     document kinds — Voucher and Expense Tracker both use print-table-ledger;
-     Quotation and Billing both use print-table-categorized. */
+     document kinds — Quotation and Billing both use print-table-categorized. */
   .print-table-ledger th:nth-child(1), .print-table-ledger td:nth-child(1),
   .print-table-ledger th:nth-child(2), .print-table-ledger td:nth-child(2) {
     width: 1%; white-space: nowrap;
@@ -204,14 +203,13 @@ function groupEntriesForConversion(entries) {
 
 /* ===== DOCUMENT TYPES =====
    Three shapes ("kinds"):
-   - "ledger": Date/Detail/Amount rows + running total -> Payment Voucher, Expense Tracker
+   - "ledger": Date/Detail/Amount rows + running total -> Payment Voucher
    - "categorized": Category -> Items -> Qty/Rate/Amount -> subtotals -> grand total,
      with the optional approval/payment/adjustments summary -> Quotation, Billing
    - "daily": Date/Paid To/Detail/Amount rows, entered as a flat list but grouped by
      date (with a subtotal per day) for viewing/printing -> Daily Expense Tracker */
 const DOC_TYPES = {
   voucher:      { kind: 'ledger',      heading: 'Payment Voucher' },
-  expense:      { kind: 'ledger',      heading: 'Expense Tracker' },
   quotation:    { kind: 'categorized', heading: 'Quotation' },
   billing:      { kind: 'categorized', heading: 'Billing' },
   dailyExpense: { kind: 'daily',       heading: 'Daily Expense Tracker' },
@@ -334,7 +332,7 @@ function showScreen(name) {
   document.getElementById('screen-' + name).classList.remove('hidden');
 }
 
-/* ===== RENDER: LEDGER EDITOR (Payment Voucher + Expense Tracker) ===== */
+/* ===== RENDER: LEDGER EDITOR (Payment Voucher) ===== */
 function openNewLedger(type) {
   currentDoc = { id: generateId(), type, clientName: '', date: todayIso(), entries: [] };
   showScreen('ledger');
@@ -352,10 +350,6 @@ function renderLedgerEditor() {
       <td><input type="number" data-idx="${i}" data-field="amount" value="${entry.amount}"></td>
       <td class="no-print"><button class="remove-row" data-idx="${i}">Remove</button></td>
     </tr>`).join('');
-
-  const conversionButtons = d.type === 'expense' ? `
-      <button id="v-save-as-quotation-btn">Save as Quotation</button>
-      <button id="v-save-as-billing-btn">Save as Billing</button>` : '';
 
   document.getElementById('screen-ledger').innerHTML = `
     <div class="no-print"><button id="v-back-btn">&larr; Back</button></div>
@@ -376,7 +370,6 @@ function renderLedgerEditor() {
     <div class="actions no-print">
       <button class="primary" id="v-save-btn">Save</button>
       <button id="v-pdf-btn">Download PDF</button>
-      ${conversionButtons}
     </div>
     <p class="print-tip no-print">Tip: in the print window, click "More settings" and turn <strong>Headers and footers OFF</strong>, <strong>Background graphics ON</strong>.</p>
   `;
@@ -421,11 +414,6 @@ function attachLedgerEditorEvents() {
     renderLedgerPrintView(currentDoc);
     window.print();
   });
-
-  if (currentDoc.type === 'expense') {
-    document.getElementById('v-save-as-quotation-btn').addEventListener('click', () => convertExpenseToDocument('quotation'));
-    document.getElementById('v-save-as-billing-btn').addEventListener('click', () => convertExpenseToDocument('billing'));
-  }
 }
 
 function validateLedgerForSave() {
@@ -440,33 +428,7 @@ function validateLedgerForSave() {
   return true;
 }
 
-// Snapshots the current Expense Tracker into a brand-new Quotation or Billing
-// document — the Expense Tracker itself is untouched. Each expense line becomes
-// its own category with one item inside it (Qty 1, Rate = the expense amount).
-async function convertExpenseToDocument(targetType) {
-  if (!validateLedgerForSave()) return;
-  await saveDocument(currentDoc);
-
-  const newDoc = {
-    id: generateId(),
-    type: targetType,
-    clientName: currentDoc.clientName,
-    date: currentDoc.date,
-    categories: currentDoc.entries.map(entry => ({
-      name: entry.detail || '(untitled)',
-      items: [{ description: entry.detail, qty: 1, unit: '', rate: entry.amount }],
-    })),
-    summary: { quotationApprovalAmount: 0, paymentReceived: 0, adjustments: [] },
-  };
-
-  if (await saveDocument(newDoc)) {
-    currentDoc = newDoc;
-    showScreen('categorized');
-    renderCategorizedEditor();
-  }
-}
-
-/* ===== PRINT: LEDGER (Payment Voucher + Expense Tracker) =====
+/* ===== PRINT: LEDGER (Payment Voucher) =====
    A plain, static rendering built straight from the document data — matches the
    existing "Mr. X / Date: X" header, underlined title, and dark-header table used
    in the current Word documents. */
@@ -1010,7 +972,6 @@ function renderList(filter = '') {
     <h1>Adorners Billing</h1>
     <div class="actions">
       <button class="primary" id="new-voucher-btn">+ New Payment Voucher</button>
-      <button class="primary" id="new-expense-btn">+ New Expense Tracker</button>
       <button class="primary" id="new-daily-btn">+ New Daily Expense Tracker</button>
       <button class="primary" id="new-quotation-btn">+ New Quotation</button>
       <button class="primary" id="new-billing-btn">+ New Billing</button>
@@ -1022,7 +983,6 @@ function renderList(filter = '') {
   `;
 
   document.getElementById('new-voucher-btn').addEventListener('click', () => openNewLedger('voucher'));
-  document.getElementById('new-expense-btn').addEventListener('click', () => openNewLedger('expense'));
   document.getElementById('new-daily-btn').addEventListener('click', () => openNewDaily());
   document.getElementById('new-quotation-btn').addEventListener('click', () => openNewCategorized('quotation'));
   document.getElementById('new-billing-btn').addEventListener('click', () => openNewCategorized('billing'));
