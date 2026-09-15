@@ -897,8 +897,8 @@ function renderCategorizedPrintView(doc) {
         <td>${rateLines.join('')}</td>
         <td>${amountLines.join('')}</td>
       </tr>
-      <tr style="background-color: #f9f9f9;">
-        <td colspan="4" style="text-align: right;"><strong>${escapeHtml(cat.name)} Subtotal</strong></td>
+      <tr>
+        <td colspan="4"><strong>Subtotal</strong></td>
         <td><strong>${formatCurrency(calcCategorySubtotal(cat.items))}</strong></td>
       </tr>`;
   }).join('');
@@ -932,6 +932,7 @@ function renderCategorizedPrintView(doc) {
         <div>Date: <strong>${formatDateLong(doc.date)}</strong></div>
       </div>
       <h2 class="print-title">${DOC_TYPES[doc.type].heading}</h2>
+      ${doc.type === 'quotation' ? `<p style="font-size:13px; margin-bottom:16px;">With Reference to our conversation regarding the interior work of your project, we would like to quote the following lump sum rates with material.</p>` : ''}
       <table class="print-table print-table-categorized">
         <thead><tr><th>S. No.</th><th>Details</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
@@ -939,6 +940,22 @@ function renderCategorizedPrintView(doc) {
           ${summaryRows}
         </tfoot>
       </table>
+      ${doc.type === 'quotation' ? `
+      <div style="margin-top: 32px; font-size: 13px; line-height: 1.6;">
+        <div><strong>Note:</strong></div>
+        <div style="margin-left: 24px;">
+          In case of any other work assign by client, extra cost may be charged with mutual consent of both the parties.<br>
+          If prices increase due to fluctuation in the US Dollar exchange rates, the quotation will be revised accordingly.
+        </div>
+        <div style="margin-top: 16px;"><strong>Payment Schedule:</strong></div>
+        <div style="margin-left: 24px;">
+          Payment schedule would be 50% advance, 40% during work, after the satisfaction in two installments and remaining 10% will be retained on completion.
+        </div>
+        <div style="margin-top: 32px;">We are looking forward for a healthy business relationship.</div>
+        <div style="margin-top: 32px;"><strong>Regards,</strong></div>
+        <div style="margin-top: 32px;">Muhammad Rizwan</div>
+      </div>
+      ` : ''}
     </div>`;
 }
 
