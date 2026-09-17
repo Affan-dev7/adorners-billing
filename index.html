@@ -27,6 +27,14 @@
   .table-scroll table { margin-bottom: 0; }
   @media (max-width: 600px) {
     #app { padding: 12px; }
+    input[type=text], input[type=number], input[type=date], button {
+      font-size: 16px; /* Prevents iOS auto-zoom */
+      padding: 10px 12px; /* Larger touch targets */
+    }
+    .field-row { flex-direction: column; gap: 12px; }
+    .field-row > div { width: 100%; }
+    .actions { flex-direction: column; }
+    .actions button { width: 100%; }
   }
   h1, h2 { margin: 0 0 16px; }
   button {
