@@ -233,6 +233,10 @@ const DOC_TYPES = {
 let documentsCache = [];
 
 async function fetchDocumentsFromServer() {
+  const res = await fetch('/api/documents?_=' + Date.now(), { cache: 'no-store' });
+  if (res.status === 401) return 'unauthorized';
+  if (!res.ok) throw new Error('Server returned ' + res.status);
+  documentsCache = await res.json();
   return 'ok';
 }
 
@@ -249,7 +253,18 @@ async function saveDocument(doc) {
   } else {
     documentsCache[idx] = doc;
   }
-  return true;
+  try {
+    const res = await fetch('/api/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(documentsCache),
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    return true;
+  } catch (err) {
+    alert('Could not save document — it may not show up on your other devices: ' + err.message);
+    return false;
+  }
 }
 
 function getDocument(id) {
@@ -257,8 +272,21 @@ function getDocument(id) {
 }
 
 async function deleteDocument(id) {
+  const before = documentsCache.length;
   documentsCache = documentsCache.filter(d => d.id !== id);
-  return true;
+  if (documentsCache.length === before) return true; // already gone, nothing to persist
+  try {
+    const res = await fetch('/api/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(documentsCache),
+    });
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    return true;
+  } catch (err) {
+    alert('Could not delete document: ' + err.message);
+    return false;
+  }
 }
 
 function generateId() {
