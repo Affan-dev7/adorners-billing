@@ -111,6 +111,9 @@
   .print-table-categorized th:nth-child(5), .print-table-categorized td:nth-child(5) {
     width: 1%; white-space: nowrap; padding-right: 24px;
   }
+  .print-table-categorized th:nth-child(6), .print-table-categorized td:nth-child(6) {
+    width: 1%; white-space: nowrap; vertical-align: middle;
+  }
 </style>
 </head>
 <body>
@@ -865,10 +868,7 @@ function renderCategorizedPrintView(doc) {
         <td>${qtyLines.join('')}</td>
         <td>${rateLines.join('')}</td>
         <td>${amountLines.join('')}</td>
-      </tr>
-      <tr>
-        <td colspan="4"><strong>Subtotal</strong></td>
-        <td><strong>${formatCurrency(calcCategorySubtotal(cat.items))}</strong></td>
+        <td>${formatCurrency(calcCategorySubtotal(cat.items))}</td>
       </tr>`;
   }).join('');
 
@@ -880,18 +880,24 @@ function renderCategorizedPrintView(doc) {
     const adjustmentRows = summary.adjustments.map(adj => {
       runningBalance -= adj.amount;
       return `
-        <tr><td colspan="4">Less ${escapeHtml(adj.label)}</td><td>${formatCurrency(adj.amount)}</td></tr>
-        <tr class="grand-total-row"><td colspan="4">Balance Amount</td><td>${formatCurrency(runningBalance)}</td></tr>`;
+        <tr><td colspan="5">Less ${escapeHtml(adj.label)}</td><td>${formatCurrency(adj.amount)}</td></tr>
+        <tr class="grand-total-row"><td colspan="5">Balance Amount</td><td>${formatCurrency(runningBalance)}</td></tr>`;
     }).join('');
     summaryRows = `
-      <tr><td colspan="4">Additional Work Amount</td><td>${formatCurrency(itemsTotal)}</td></tr>
-      <tr><td colspan="4">Quotation Approval Amount</td><td>${formatCurrency(summary.quotationApprovalAmount)}</td></tr>
-      <tr><td colspan="4">Total Amount</td><td>${formatCurrency(totalAmount)}</td></tr>
-      <tr><td colspan="4">Payment Received</td><td>${formatCurrency(summary.paymentReceived)}</td></tr>
-      <tr class="grand-total-row"><td colspan="4">Balance Amount</td><td>${formatCurrency(balanceAfterPayment)}</td></tr>
+      <tr><td colspan="5">Additional Work Amount</td><td>${formatCurrency(itemsTotal)}</td></tr>
+      <tr><td colspan="5">Quotation Approval Amount</td><td>${formatCurrency(summary.quotationApprovalAmount)}</td></tr>
+      <tr><td colspan="5">Total Amount</td><td>${formatCurrency(totalAmount)}</td></tr>
+      <tr><td colspan="5">Payment Received</td><td>${formatCurrency(summary.paymentReceived)}</td></tr>
+      <tr class="grand-total-row"><td colspan="5">Balance Amount</td><td>${formatCurrency(balanceAfterPayment)}</td></tr>
       ${adjustmentRows}`;
   } else {
-    summaryRows = `<tr class="grand-total-row"><td colspan="4">Grand Total</td><td>${formatCurrency(itemsTotal)}</td></tr>`;
+    summaryRows = `
+      <tr class="grand-total-row">
+        <td></td>
+        <td><strong>Total Amount</strong></td>
+        <td colspan="3"></td>
+        <td><strong>${formatCurrency(itemsTotal)}</strong></td>
+      </tr>`;
   }
 
   document.getElementById('print-area').innerHTML = `
@@ -903,7 +909,7 @@ function renderCategorizedPrintView(doc) {
       <h2 class="print-title">${DOC_TYPES[doc.type].heading}</h2>
       ${doc.type === 'quotation' ? `<p style="font-size:13px; margin-bottom:16px;">With Reference to our conversation regarding the interior work of your project, we would like to quote the following lump sum rates with material.</p>` : ''}
       <table class="print-table print-table-categorized">
-        <thead><tr><th>S. No.</th><th>Details</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+        <thead><tr><th>S. No.</th><th>Details</th><th>Qty</th><th>Rate</th><th>Amount</th><th>Total</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           ${summaryRows}
